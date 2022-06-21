@@ -13,7 +13,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const addresses = chainIdToAddresses[chainId];
 
   const nft = await deploy("ERC721", {
-    args: ["Freedom", "FREE"], // todo: check naming availability
+    args: ["Freedom", "FREE", "test.com/"], // todo: check naming availability
     from: deployer,
     log: true,
   });
@@ -25,6 +25,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       addresses.vrfCoordinatorAddress,
       addresses.linkTokenAddress,
       addresses.vrfKeyHash,
+      addresses.vrfFee,
       nft.address,
     ],
     from: deployer,

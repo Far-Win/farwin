@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity 0.7.0;
 
 import "./ERC721.sol";
 import "./utils/SafeMath.sol";
@@ -23,7 +23,7 @@ contract Curve is VRFConsumerBase {
 
     mapping(bytes32 => Request) public requests;
     uint256 public nftsCount;
-    bool public gameEnded = false;
+    bool public gameEnded;
 
     // this is currently 0.5%
     uint256 public initMintPrice = 0.002 ether; // at 0
@@ -40,7 +40,7 @@ contract Curve is VRFConsumerBase {
     address payable public creator;
     address payable public charity;
 
-    ERC721 public neolastics;
+    ERC721 public nft;
 
     event Minted(
         uint256 indexed tokenId,
@@ -59,58 +59,50 @@ contract Curve is VRFConsumerBase {
         uint256 indexed prizeAmount
     );
 
-    /*
-    todo: 
-    flash minting protection
-    front-running exploits
-    */
     constructor(
         address payable _creator,
         address payable _charity,
         address _coordinator,
         address _link,
         bytes32 _keyHash,
-        ERC721 _neolastics
+        uint256 _vrfFee,
+        ERC721 _nft
     )
         VRFConsumerBase(
             _coordinator, // VRF Coordinator
             _link // LINK Token
         )
     {
-        // create ERC721 contract with parameters (name, symbol).
         creator = _creator;
         charity = _charity;
-        reserve = 0;
-        neolastics = _neolastics;
+
+        nft = _nft;
 
         keyHash = _keyHash;
-        fee = 0.1 * 10**18; // 0.1 LINK (Varies by network)
+        fee = _vrfFee; // (Varies by network)
     }
 
     /*
-    With one mint front-runned, a front-runner will make a loss.
-    With linear price increases of 0.001, it's not profitable.
-    BECAUSE it costs 0.012 ETH at 50 gwei to mint (storage/smart contract costs) + 0.5% loss from creator fee.
+        With one mint front-runned, a front-runner will make a loss.
+        With linear price increases of 0.001, it's not profitable.
+        BECAUSE it costs 0.012 ETH at 50 gwei to mint (storage/smart contract costs) + 0.5% loss from creator fee.
 
-    It becomes more profitable to front-run if there are multiple buys that can be spotted
-    from multiple buyers in one block. However, depending on gas price, it depends how profitable it is.
-    Because the planned buffer on the front-end is 0.01 ETH, it's not profitable to front-run any normal amounts.
-    Unless, someone creates a specific contract to start bulk minting.
-    To curb speculation, users can only mint one per transaction (unless you create a separate contract to do this).
-    Thus, ultimately, at this stage, while front-running can be profitable,
-    it is not generally feasible at this small scale.
+        It becomes more profitable to front-run if there are multiple buys that can be spotted
+        from multiple buyers in one block. However, depending on gas price, it depends how profitable it is.
+        Because the planned buffer on the front-end is 0.01 ETH, it's not profitable to front-run any normal amounts.
+        Unless, someone creates a specific contract to start bulk minting.
+        To curb speculation, users can only mint one per transaction (unless you create a separate contract to do this).
+        Thus, ultimately, at this stage, while front-running can be profitable,
+        it is not generally feasible at this small scale.
 
-    Thus, for the sake of usability, there's no additional locks here for front-running protection.
-    A lock would be to have a transaction include the current price:
-    But that means, that only one neolastic per block would be minted (unless you can guess price rises).
+        Thus, for the sake of usability, there's no additional locks here for front-running protection.
+        A lock would be to have a transaction include the current price:
+        But that means, that only one neolastic per block would be minted (unless you can guess price rises).
     */
     function mint() public payable virtual returns (bytes32 _requestId) {
-        require(!gameEnded, "Game ended");
+        require(!gameEnded, "C: Game ended");
         // you can only mint one at a time.
-        require(
-            LINK.balanceOf(address(this)) >= fee,
-            "Not enough LINK - fill contract with faucet"
-        );
+        require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
         require(msg.value > 0, "C: No ETH sent");
 
         uint256 mintPrice = getCurrentPriceToMint();
@@ -123,16 +115,25 @@ contract Curve is VRFConsumerBase {
         uint256 reserveCut = getReserveCut();
         reserve = reserve.add(reserveCut);
 
-        creator.transfer(mintPrice.mul(CREATOR_PERCENT).div(DENOMINATOR));
-        charity.transfer(mintPrice.mul(CHARITY_PERCENT).div(DENOMINATOR));
-
-        if (msg.value.sub(mintPrice) > 0) {
-            msg.sender.transfer(msg.value.sub(mintPrice)); // excess/padding/buffer
-        }
-
         requests[_requestId]._address = msg.sender;
         requests[_requestId]._mintPrice = mintPrice;
         requests[_requestId]._reserve = reserve;
+
+        bool success;
+        (success, ) = creator.call{
+            value: mintPrice.mul(CREATOR_PERCENT).div(DENOMINATOR)
+        }("");
+        require(success);
+        (success, ) = charity.call{
+            value: mintPrice.mul(CHARITY_PERCENT).div(DENOMINATOR)
+        }("");
+        require(success);
+
+        uint256 buffer = msg.value.sub(mintPrice); // excess/padding/buffer
+        if (buffer > 0) {
+            (success, ) = msg.sender.call{value: buffer}("");
+            require(success);
+        }
 
         return _requestId;
     }
@@ -142,10 +143,7 @@ contract Curve is VRFConsumerBase {
         override
     {
         // mint first to increase supply
-        uint256 tokenId = neolastics.mint(
-            requests[requestId]._address,
-            randomness
-        );
+        uint256 tokenId = nft.mint(requests[requestId]._address, randomness);
         emit Minted(
             tokenId,
             requests[requestId]._mintPrice,
@@ -154,7 +152,7 @@ contract Curve is VRFConsumerBase {
     }
 
     function burn(uint256 tokenId) public virtual {
-        uint256 burnPrice = 0;
+        uint256 burnPrice;
 
         bytes32 hashed = keccak256(
             abi.encodePacked(
@@ -170,33 +168,28 @@ contract Curve is VRFConsumerBase {
         } else if (isUkrainianFlag(tokenId)) {
             burnPrice = getCurrentPriceToBurn().mul(2);
         } else {
-            require(reserve > 0, "Reserve should be > 0.");
+            require(reserve > 0, "Reserve should be > 0");
 
-            string memory lotteryImage = neolastics.generateSVGofTokenById(
-                lotteryId
-            );
-            string memory tokenImage = neolastics.generateSVGofTokenById(
-                tokenId
-            );
+            string memory lotteryImage = nft.generateSVGofTokenById(lotteryId);
+            string memory tokenImage = nft.generateSVGofTokenById(tokenId);
             if (
                 keccak256(abi.encodePacked(lotteryImage)) ==
                 keccak256(abi.encodePacked(tokenImage))
             ) {
                 burnPrice = reserve;
-                reserve = 0;
                 gameEnded = true;
                 emit Lottery(tokenId, lotteryId, true, burnPrice);
             }
         }
 
-        neolastics.burn(msg.sender, tokenId);
+        nft.burn(msg.sender, tokenId);
+        nftsCount--;
         emit Lottery(tokenId, lotteryId, false, burnPrice);
 
-        if (reserve != 0) {
-            reserve = reserve.sub(burnPrice);
-            msg.sender.transfer(burnPrice);
-        }
-        nftsCount--;
+        reserve = reserve.sub(burnPrice);
+        (bool success, ) = msg.sender.call{value: burnPrice}("");
+        require(success);
+
         emit Burned(tokenId, burnPrice, reserve);
     }
 
@@ -224,6 +217,8 @@ contract Curve is VRFConsumerBase {
         return false;
     }
 
+    // helper function for generation
+    // from: https://github.com/GNSPS/solidity-bytes-utils/blob/master/contracts/BytesLib.sol
     function toUint8(bytes memory _bytes, uint256 _start)
         internal
         pure
