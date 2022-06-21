@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity 0.7.0;
 
 // import "../../GSN/Context.sol";
 import "./interfaces/IERC721.sol";
@@ -98,13 +98,13 @@ contract ERC721 is
     address public curve;
     // this is practically impossible to overflow.
     // but theoretically possible. Doesn't change that much, unless it overflows in one block (which is practically impossible)
-    uint256 public totalEverMinted = 0;
+    uint256 public totalEverMinted;
     string[] palette;
 
     event Minted(
         uint256 indexed tokenId,
         uint256 totalEverMinted,
-        uint256 indexed timestamp,
+        uint256 indexed randomness,
         address indexed to,
         uint256 supplyAfterMint
     );
@@ -117,7 +117,11 @@ contract ERC721 is
     /**
      * @dev Initializes the contract by setting a `name` and a `symbol` to the token collection.
      */
-    constructor(string memory name_, string memory symbol_) public {
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        string memory baseURI_
+    ) public {
         _name = name_;
         _symbol = symbol_;
 
@@ -126,8 +130,7 @@ contract ERC721 is
         _registerInterface(_INTERFACE_ID_ERC721_METADATA);
         _registerInterface(_INTERFACE_ID_ERC721_ENUMERABLE);
 
-        // NEOLASTIC specific
-        _setBaseURI("http://164.90.202.117:3002/");
+        _setBaseURI(baseURI_);
         curve = msg.sender;
 
         palette.push("#009A49"); //green: 1/5 chance (0.1992)
@@ -137,27 +140,6 @@ contract ERC721 is
         palette.push("#000000"); //black: 1/5 chance
         palette.push("#ffffff"); //white: rare 1/256 chance for a tile
         // .. //
-    }
-
-    /*
-    Neolastic specific code.
-    */
-    // helper function for generation
-    // from: https://github.com/GNSPS/solidity-bytes-utils/blob/master/contracts/BytesLib.sol
-    function toUint8(bytes memory _bytes, uint256 _start)
-        internal
-        pure
-        returns (uint8)
-    {
-        require(_start + 1 >= _start, "toUint8_overflow");
-        require(_bytes.length >= _start + 1, "toUint8_outOfBounds");
-        uint8 tempUint;
-
-        assembly {
-            tempUint := mload(add(add(_bytes, 0x1), _start))
-        }
-
-        return tempUint;
     }
 
     function mint(address to, uint256 randomness)
@@ -190,6 +172,17 @@ contract ERC721 is
         emit Minted(tokenId, totalEverMinted, randomness, to, totalSupply());
 
         return tokenId;
+    }
+
+    function burn(address burner, uint256 tokenId) public virtual {
+        require(msg.sender == curve, "FREEDOM: Burner is not the curve"); // only curve can burn it
+        require(burner == ownerOf(tokenId), "FREEDOM: Not the correct owner");
+
+        // checking if token exists in the _burn function (don't need to check here)
+
+        _burn(tokenId);
+
+        emit Burned(tokenId, burner, totalSupply());
     }
 
     function generateSVGofTokenById(uint256 _tokenId)
@@ -273,33 +266,40 @@ contract ERC721 is
         return svg;
     }
 
-    function burn(address burner, uint256 tokenId) public virtual {
-        require(msg.sender == curve, "FREEDOM: Burner is not the curve"); // only curve can burn it
-        require(burner == ownerOf(tokenId), "FREEDOM: Not the correct owner");
+    // helper function for generation
+    // from: https://github.com/GNSPS/solidity-bytes-utils/blob/master/contracts/BytesLib.sol
+    function toUint8(bytes memory _bytes, uint256 _start)
+        internal
+        pure
+        returns (uint8)
+    {
+        require(_start + 1 >= _start, "toUint8_overflow");
+        require(_bytes.length >= _start + 1, "toUint8_outOfBounds");
+        uint8 tempUint;
 
-        // checking if token exists in the _burn function (don't need to check here)
+        assembly {
+            tempUint := mload(add(add(_bytes, 0x1), _start))
+        }
 
-        _burn(tokenId);
-
-        emit Burned(tokenId, burner, totalSupply());
+        return tempUint;
     }
 
     /*
-    ERC721 code
-    - Took out safeMint. Not needed since only Curve can mint.
-    - Took out beforeTokenTransfer hook.
+        ERC721 code
+        - Took out safeMint. Not needed since only Curve can mint.
+        - Took out beforeTokenTransfer hook.
     */
 
     /**
      * @dev See {IERC721-balanceOf}.
      */
-    function balanceOf(address owner) public view override returns (uint256) {
+    function balanceOf(address _owner) public view override returns (uint256) {
         require(
-            owner != address(0),
+            _owner != address(0),
             "ERC721: balance query for the zero address"
         );
 
-        return _holderTokens[owner].length();
+        return _holderTokens[_owner].length();
     }
 
     /**
@@ -367,13 +367,13 @@ contract ERC721 is
     /**
      * @dev See {IERC721Enumerable-tokenOfOwnerByIndex}.
      */
-    function tokenOfOwnerByIndex(address owner, uint256 index)
+    function tokenOfOwnerByIndex(address _owner, uint256 index)
         public
         view
         override
         returns (uint256)
     {
-        return _holderTokens[owner].at(index);
+        return _holderTokens[_owner].at(index);
     }
 
     /**
@@ -401,11 +401,11 @@ contract ERC721 is
      * @dev See {IERC721-approve}.
      */
     function approve(address to, uint256 tokenId) public virtual override {
-        address owner = ownerOf(tokenId);
-        require(to != owner, "ERC721: approval to current owner");
+        address _owner = ownerOf(tokenId);
+        require(to != _owner, "ERC721: approval to current owner");
 
         require(
-            msg.sender == owner || isApprovedForAll(owner, msg.sender),
+            msg.sender == _owner || isApprovedForAll(_owner, msg.sender),
             "ERC721: approve caller is not owner nor approved for all"
         );
 
@@ -446,13 +446,13 @@ contract ERC721 is
     /**
      * @dev See {IERC721-isApprovedForAll}.
      */
-    function isApprovedForAll(address owner, address operator)
+    function isApprovedForAll(address _owner, address operator)
         public
         view
         override
         returns (bool)
     {
-        return _operatorApprovals[owner][operator];
+        return _operatorApprovals[_owner][operator];
     }
 
     /**
@@ -562,10 +562,10 @@ contract ERC721 is
             _exists(tokenId),
             "ERC721: operator query for nonexistent token"
         );
-        address owner = ownerOf(tokenId);
-        return (spender == owner ||
+        address _owner = ownerOf(tokenId);
+        return (spender == _owner ||
             getApproved(tokenId) == spender ||
-            isApprovedForAll(owner, spender));
+            isApprovedForAll(_owner, spender));
     }
 
     /**
@@ -602,7 +602,7 @@ contract ERC721 is
      * Emits a {Transfer} event.
      */
     function _burn(uint256 tokenId) internal virtual {
-        address owner = ownerOf(tokenId);
+        address _owner = ownerOf(tokenId);
 
         // Clear approvals
         _approve(address(0), tokenId);
@@ -612,11 +612,11 @@ contract ERC721 is
             delete _tokenURIs[tokenId];
         }
 
-        _holderTokens[owner].remove(tokenId);
+        _holderTokens[_owner].remove(tokenId);
 
         _tokenOwners.remove(tokenId);
 
-        emit Transfer(owner, address(0), tokenId);
+        emit Transfer(_owner, address(0), tokenId);
     }
 
     /**
