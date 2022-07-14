@@ -5,18 +5,12 @@ import { chainIdToAddresses } from "../networkVariables";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments, getNamedAccounts } = hre;
-  const { deploy } = deployments;
+  const { deploy, execute } = deployments;
 
   const { deployer } = await getNamedAccounts();
   // get current chainId
   const chainId = parseInt(await hre.getChainId());
   const addresses = chainIdToAddresses[chainId];
-
-  const nft = await deploy("ERC721", {
-    args: ["Freedom", "FREE", "test.com/"], // todo: check naming availability
-    from: deployer,
-    log: true,
-  });
 
   const curve = await deploy("Curve", {
     args: [
@@ -26,11 +20,26 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       addresses.linkTokenAddress,
       addresses.vrfKeyHash,
       addresses.vrfFee,
-      nft.address,
     ],
     from: deployer,
     log: true,
   });
+
+  const nft = await deploy("ERC721", {
+    args: ["Freedom", "FREE", "test.com/", curve.address], // todo: check naming availability
+    from: deployer,
+    log: true,
+  });
+
+  await execute(
+    "Curve",
+    {
+      from: deployer,
+      log: true,
+    },
+    "initNFT",
+    nft.address
+  );
 };
 export default func;
 func.tags = ["ERC721", "Curve"];

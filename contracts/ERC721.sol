@@ -122,7 +122,8 @@ contract ERC721 is
     constructor(
         string memory name_,
         string memory symbol_,
-        string memory baseURI_
+        string memory baseURI_,
+        address _curve
     ) public {
         _name = name_;
         _symbol = symbol_;
@@ -133,7 +134,7 @@ contract ERC721 is
         _registerInterface(_INTERFACE_ID_ERC721_ENUMERABLE);
 
         _setBaseURI(baseURI_);
-        curve = msg.sender;
+        curve = _curve;
 
         palette.push("#009A49"); //green: 1/5 chance (0.1992)
         palette.push("#005BBB"); //blue: 1/5 chance
