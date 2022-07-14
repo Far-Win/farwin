@@ -238,7 +238,7 @@ contract Curve is VRFConsumerBase {
         return tempUint;
     }
 
-    // if supply 0, mint price = 0.001
+    // if supply 0, mint price = 0.002
     function getCurrentPriceToMint() public view virtual returns (uint256) {
         uint256 mintPrice = initMintPrice.add(nftsCount.mul(mintPriceMove));
         return mintPrice;
