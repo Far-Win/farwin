@@ -193,11 +193,11 @@ contract ERC721 is
         virtual
         returns (string memory)
     {
-        return generateSVGFromHash(bytes32(_tokenId));
+        return _generateSVGFromHash(bytes32(_tokenId));
     }
 
-    function generateSVGFromHash(bytes32 _hash)
-        public
+    function _generateSVGFromHash(bytes32 _hash)
+        internal
         view
         virtual
         returns (string memory)
