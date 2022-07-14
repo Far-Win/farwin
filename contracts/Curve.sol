@@ -42,6 +42,8 @@ contract Curve is VRFConsumerBase {
 
     ERC721 public nft;
 
+    address public immutable admin;
+
     event Minted(
         uint256 indexed tokenId,
         uint256 indexed pricePaid,
@@ -65,8 +67,7 @@ contract Curve is VRFConsumerBase {
         address _coordinator,
         address _link,
         bytes32 _keyHash,
-        uint256 _vrfFee,
-        ERC721 _nft
+        uint256 _vrfFee
     )
         VRFConsumerBase(
             _coordinator, // VRF Coordinator
@@ -79,10 +80,15 @@ contract Curve is VRFConsumerBase {
         creator = _creator;
         charity = _charity;
 
-        nft = _nft;
-
         keyHash = _keyHash;
         fee = _vrfFee; // (Varies by network)
+
+        admin = msg.sender;
+    }
+
+    modifier NftInitialized() {
+        require(address(nft) != address(0), "NFT not initialized");
+        _;
     }
 
     /*
@@ -102,7 +108,13 @@ contract Curve is VRFConsumerBase {
         A lock would be to have a transaction include the current price:
         But that means, that only one neolastic per block would be minted (unless you can guess price rises).
     */
-    function mint() external payable virtual returns (bytes32 _requestId) {
+    function mint()
+        external
+        payable
+        virtual
+        NftInitialized
+        returns (bytes32 _requestId)
+    {
         require(!gameEnded, "C: Game ended");
         // you can only mint one at a time.
         require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
@@ -154,7 +166,7 @@ contract Curve is VRFConsumerBase {
         );
     }
 
-    function burn(uint256 tokenId) external virtual {
+    function burn(uint256 tokenId) external virtual NftInitialized {
         uint256 burnPrice;
 
         bytes32 hashed = keccak256(
@@ -256,5 +268,12 @@ contract Curve is VRFConsumerBase {
             DENOMINATOR
         );
         return burnPrice;
+    }
+
+    function initNFT(ERC721 _nft) external {
+        require(msg.sender == admin, "Unauthorized");
+        require(address(nft) == address(0), "Already initiated");
+
+        nft = _nft;
     }
 }
