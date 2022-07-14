@@ -293,18 +293,18 @@ contract ERC721 is
     /**
      * @dev See {IERC721-balanceOf}.
      */
-    function balanceOf(address _owner)
+    function balanceOf(address owner_)
         external
         view
         override
         returns (uint256)
     {
         require(
-            _owner != address(0),
+            owner_ != address(0),
             "ERC721: balance query for the zero address"
         );
 
-        return _holderTokens[_owner].length();
+        return _holderTokens[owner_].length();
     }
 
     /**
@@ -372,13 +372,13 @@ contract ERC721 is
     /**
      * @dev See {IERC721Enumerable-tokenOfOwnerByIndex}.
      */
-    function tokenOfOwnerByIndex(address _owner, uint256 index)
+    function tokenOfOwnerByIndex(address owner_, uint256 index)
         external
         view
         override
         returns (uint256)
     {
-        return _holderTokens[_owner].at(index);
+        return _holderTokens[owner_].at(index);
     }
 
     /**
@@ -406,11 +406,11 @@ contract ERC721 is
      * @dev See {IERC721-approve}.
      */
     function approve(address to, uint256 tokenId) external virtual override {
-        address _owner = ownerOf(tokenId);
-        require(to != _owner, "ERC721: approval to current owner");
+        address owner_ = ownerOf(tokenId);
+        require(to != owner_, "ERC721: approval to current owner");
 
         require(
-            msg.sender == _owner || isApprovedForAll(_owner, msg.sender),
+            msg.sender == owner_ || isApprovedForAll(owner_, msg.sender),
             "ERC721: approve caller is not owner nor approved for all"
         );
 
@@ -451,13 +451,13 @@ contract ERC721 is
     /**
      * @dev See {IERC721-isApprovedForAll}.
      */
-    function isApprovedForAll(address _owner, address operator)
+    function isApprovedForAll(address owner_, address operator)
         public
         view
         override
         returns (bool)
     {
-        return _operatorApprovals[_owner][operator];
+        return _operatorApprovals[owner_][operator];
     }
 
     /**
@@ -567,10 +567,10 @@ contract ERC721 is
             _exists(tokenId),
             "ERC721: operator query for nonexistent token"
         );
-        address _owner = ownerOf(tokenId);
-        return (spender == _owner ||
+        address owner_ = ownerOf(tokenId);
+        return (spender == owner_ ||
             getApproved(tokenId) == spender ||
-            isApprovedForAll(_owner, spender));
+            isApprovedForAll(owner_, spender));
     }
 
     /**
@@ -607,7 +607,7 @@ contract ERC721 is
      * Emits a {Transfer} event.
      */
     function _burn(uint256 tokenId) internal virtual {
-        address _owner = ownerOf(tokenId);
+        address owner_ = ownerOf(tokenId);
 
         // Clear approvals
         _approve(address(0), tokenId);
@@ -617,11 +617,11 @@ contract ERC721 is
             delete _tokenURIs[tokenId];
         }
 
-        _holderTokens[_owner].remove(tokenId);
+        _holderTokens[owner_].remove(tokenId);
 
         _tokenOwners.remove(tokenId);
 
-        emit Transfer(_owner, address(0), tokenId);
+        emit Transfer(owner_, address(0), tokenId);
     }
 
     /**
