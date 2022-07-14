@@ -12,8 +12,8 @@ contract Curve is VRFConsumerBase {
     // 99.5% going into reserve.
     // 0.5% going to creator.
 
-    bytes32 internal keyHash;
-    uint256 internal fee;
+    bytes32 internal immutable keyHash;
+    uint256 internal immutable fee;
 
     struct Request {
         address _address;
@@ -37,8 +37,8 @@ contract Curve is VRFConsumerBase {
     // but useful to know off-hand. Especially because this.balance might not be the same as the actual reserve
     uint256 public reserve;
 
-    address payable public creator;
-    address payable public charity;
+    address payable public immutable creator;
+    address payable public immutable charity;
 
     ERC721 public nft;
 

@@ -95,7 +95,7 @@ contract ERC721 is
     bytes4 private constant _INTERFACE_ID_ERC721_ENUMERABLE = 0x780e9d63;
 
     /* FREEDOM VARS */
-    address public curve;
+    address public immutable curve;
     // this is practically impossible to overflow.
     // but theoretically possible. Doesn't change that much, unless it overflows in one block (which is practically impossible)
     uint256 public totalEverMinted;
