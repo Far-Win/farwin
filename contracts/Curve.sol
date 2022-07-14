@@ -126,16 +126,16 @@ contract Curve is VRFConsumerBase {
         (success, ) = creator.call{
             value: mintPrice.mul(CREATOR_PERCENT).div(DENOMINATOR)
         }("");
-        require(success);
+        require(success, "Unable to send to creator");
         (success, ) = charity.call{
             value: mintPrice.mul(CHARITY_PERCENT).div(DENOMINATOR)
         }("");
-        require(success);
+        require(success, "Unable to send to charity");
 
         uint256 buffer = msg.value.sub(mintPrice); // excess/padding/buffer
         if (buffer > 0) {
             (success, ) = msg.sender.call{value: buffer}("");
-            require(success);
+            require(success, "Unable to send buffer back");
         }
 
         return _requestId;
@@ -191,7 +191,7 @@ contract Curve is VRFConsumerBase {
 
         reserve = reserve.sub(burnPrice);
         (bool success, ) = msg.sender.call{value: burnPrice}("");
-        require(success);
+        require(success, "Unable to send burnPrice");
 
         emit Burned(tokenId, burnPrice, reserve);
     }
