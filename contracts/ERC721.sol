@@ -143,7 +143,7 @@ contract ERC721 is
     }
 
     function mint(address to, uint256 randomness)
-        public
+        external
         virtual
         returns (uint256 newTokenId)
     {
@@ -174,7 +174,7 @@ contract ERC721 is
         return tokenId;
     }
 
-    function burn(address burner, uint256 tokenId) public virtual {
+    function burn(address burner, uint256 tokenId) external virtual {
         require(msg.sender == curve, "FREEDOM: Burner is not the curve"); // only curve can burn it
         require(burner == ownerOf(tokenId), "FREEDOM: Not the correct owner");
 
@@ -186,7 +186,7 @@ contract ERC721 is
     }
 
     function generateSVGofTokenById(uint256 _tokenId)
-        public
+        external
         view
         virtual
         returns (string memory)
@@ -293,7 +293,12 @@ contract ERC721 is
     /**
      * @dev See {IERC721-balanceOf}.
      */
-    function balanceOf(address _owner) public view override returns (uint256) {
+    function balanceOf(address _owner)
+        external
+        view
+        override
+        returns (uint256)
+    {
         require(
             _owner != address(0),
             "ERC721: balance query for the zero address"
@@ -316,14 +321,14 @@ contract ERC721 is
     /**
      * @dev See {IERC721Metadata-name}.
      */
-    function name() public view override returns (string memory) {
+    function name() external view override returns (string memory) {
         return _name;
     }
 
     /**
      * @dev See {IERC721Metadata-symbol}.
      */
-    function symbol() public view override returns (string memory) {
+    function symbol() external view override returns (string memory) {
         return _symbol;
     }
 
@@ -331,7 +336,7 @@ contract ERC721 is
      * @dev See {IERC721Metadata-tokenURI}.
      */
     function tokenURI(uint256 tokenId)
-        public
+        external
         view
         override
         returns (string memory)
@@ -360,7 +365,7 @@ contract ERC721 is
      * automatically added as a prefix in {tokenURI} to each token's URI, or
      * to the token ID if no specific URI is set for that token ID.
      */
-    function baseURI() public view returns (string memory) {
+    function baseURI() external view returns (string memory) {
         return _baseURI;
     }
 
@@ -368,7 +373,7 @@ contract ERC721 is
      * @dev See {IERC721Enumerable-tokenOfOwnerByIndex}.
      */
     function tokenOfOwnerByIndex(address _owner, uint256 index)
-        public
+        external
         view
         override
         returns (uint256)
@@ -388,7 +393,7 @@ contract ERC721 is
      * @dev See {IERC721Enumerable-tokenByIndex}.
      */
     function tokenByIndex(uint256 index)
-        public
+        external
         view
         override
         returns (uint256)
@@ -400,7 +405,7 @@ contract ERC721 is
     /**
      * @dev See {IERC721-approve}.
      */
-    function approve(address to, uint256 tokenId) public virtual override {
+    function approve(address to, uint256 tokenId) external virtual override {
         address _owner = ownerOf(tokenId);
         require(to != _owner, "ERC721: approval to current owner");
 
@@ -433,7 +438,7 @@ contract ERC721 is
      * @dev See {IERC721-setApprovalForAll}.
      */
     function setApprovalForAll(address operator, bool approved)
-        public
+        external
         virtual
         override
     {
@@ -462,7 +467,7 @@ contract ERC721 is
         address from,
         address to,
         uint256 tokenId
-    ) public virtual override {
+    ) external virtual override {
         //solhint-disable-next-line max-line-length
         require(
             _isApprovedOrOwner(msg.sender, tokenId),
@@ -479,7 +484,7 @@ contract ERC721 is
         address from,
         address to,
         uint256 tokenId
-    ) public virtual override {
+    ) external virtual override {
         safeTransferFrom(from, to, tokenId, "");
     }
 

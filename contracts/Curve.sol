@@ -102,7 +102,7 @@ contract Curve is VRFConsumerBase {
         A lock would be to have a transaction include the current price:
         But that means, that only one neolastic per block would be minted (unless you can guess price rises).
     */
-    function mint() public payable virtual returns (bytes32 _requestId) {
+    function mint() external payable virtual returns (bytes32 _requestId) {
         require(!gameEnded, "C: Game ended");
         // you can only mint one at a time.
         require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
@@ -154,7 +154,7 @@ contract Curve is VRFConsumerBase {
         );
     }
 
-    function burn(uint256 tokenId) public virtual {
+    function burn(uint256 tokenId) external virtual {
         uint256 burnPrice;
 
         bytes32 hashed = keccak256(
