@@ -60,6 +60,8 @@ contract ERC721 is
     // Base URI
     string private _baseURI;
 
+    event NewBaseURI(string baseURI_);
+
     /*
      *     bytes4(keccak256('balanceOf(address)')) == 0x70a08231
      *     bytes4(keccak256('ownerOf(uint256)')) == 0x6352211e
@@ -664,6 +666,7 @@ contract ERC721 is
      */
     function _setBaseURI(string memory baseURI_) internal virtual {
         _baseURI = baseURI_;
+        emit NewBaseURI(baseURI_);
     }
 
     /**
