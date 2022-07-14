@@ -73,6 +73,9 @@ contract Curve is VRFConsumerBase {
             _link // LINK Token
         )
     {
+        require(_creator != address(0));
+        require(_charity != address(0));
+
         creator = _creator;
         charity = _charity;
 
