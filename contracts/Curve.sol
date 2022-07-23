@@ -16,9 +16,11 @@ contract Curve is VRFConsumerBase {
     uint256 internal immutable fee;
 
     struct Request {
+        bool isMint;
         address _address;
-        uint256 _mintPrice;
+        uint256 _price;
         uint256 _reserve;
+        uint256 _tokenId;
     }
 
     mapping(bytes32 => Request) public requests;
@@ -130,8 +132,9 @@ contract Curve is VRFConsumerBase {
         uint256 reserveCut = getReserveCut();
         reserve = reserve.add(reserveCut);
 
+        requests[_requestId].isMint = true;
         requests[_requestId]._address = msg.sender;
-        requests[_requestId]._mintPrice = mintPrice;
+        requests[_requestId]._price = mintPrice;
         requests[_requestId]._reserve = reserve;
 
         bool success;
@@ -157,55 +160,62 @@ contract Curve is VRFConsumerBase {
         internal
         override
     {
-        // mint first to increase supply
-        uint256 tokenId = nft.mint(requests[requestId]._address, randomness);
-        emit Minted(
-            tokenId,
-            requests[requestId]._mintPrice,
-            requests[requestId]._reserve
-        );
+        if (requests[requestId].isMint) {
+            // mint first to increase supply
+            uint256 tokenId = nft.mint(
+                requests[requestId]._address,
+                randomness
+            );
+            emit Minted(
+                tokenId,
+                requests[requestId]._price,
+                requests[requestId]._reserve
+            );
+        } else {
+            // Burn
+            uint256 burnPrice;
+            uint256 tokenId = requests[requestId]._tokenId;
+
+            if (isRare(tokenId)) {
+                burnPrice = getCurrentPriceToBurn().mul(5);
+            } else if (isUkrainianFlag(tokenId)) {
+                burnPrice = getCurrentPriceToBurn().mul(2);
+            } else {
+                require(reserve > 0, "Reserve should be > 0");
+
+                string memory lotteryImage = nft.generateSVGofTokenById(
+                    randomness
+                );
+                string memory tokenImage = nft.generateSVGofTokenById(tokenId);
+                if (
+                    keccak256(abi.encodePacked(lotteryImage)) ==
+                    keccak256(abi.encodePacked(tokenImage))
+                ) {
+                    burnPrice = reserve;
+                    gameEnded = true;
+                    emit Lottery(tokenId, randomness, true, burnPrice);
+                }
+            }
+
+            nft.burn(requests[requestId]._address, tokenId);
+            nftsCount--;
+            emit Lottery(tokenId, randomness, false, burnPrice);
+
+            reserve = reserve.sub(burnPrice);
+            (bool success, ) = requests[requestId]._address.call{
+                value: burnPrice
+            }("");
+            require(success, "Unable to send burnPrice");
+
+            emit Burned(tokenId, burnPrice, reserve);
+        }
     }
 
     function burn(uint256 tokenId) external virtual NftInitialized {
-        uint256 burnPrice;
+        bytes32 _requestId = requestRandomness(keyHash, fee);
 
-        bytes32 hashed = keccak256(
-            abi.encodePacked(
-                blockhash(block.number - 1),
-                block.timestamp,
-                msg.sender
-            )
-        );
-        uint256 lotteryId = uint256(hashed);
-
-        if (isRare(tokenId)) {
-            burnPrice = getCurrentPriceToBurn().mul(5);
-        } else if (isUkrainianFlag(tokenId)) {
-            burnPrice = getCurrentPriceToBurn().mul(2);
-        } else {
-            require(reserve > 0, "Reserve should be > 0");
-
-            string memory lotteryImage = nft.generateSVGofTokenById(lotteryId);
-            string memory tokenImage = nft.generateSVGofTokenById(tokenId);
-            if (
-                keccak256(abi.encodePacked(lotteryImage)) ==
-                keccak256(abi.encodePacked(tokenImage))
-            ) {
-                burnPrice = reserve;
-                gameEnded = true;
-                emit Lottery(tokenId, lotteryId, true, burnPrice);
-            }
-        }
-
-        nft.burn(msg.sender, tokenId);
-        nftsCount--;
-        emit Lottery(tokenId, lotteryId, false, burnPrice);
-
-        reserve = reserve.sub(burnPrice);
-        (bool success, ) = msg.sender.call{value: burnPrice}("");
-        require(success, "Unable to send burnPrice");
-
-        emit Burned(tokenId, burnPrice, reserve);
+        requests[_requestId]._address = msg.sender;
+        requests[_requestId]._tokenId = tokenId;
     }
 
     function isRare(uint256 tokenId) public pure returns (bool) {
