@@ -30,8 +30,8 @@ contract Curve is VRFConsumerBase {
     // this is currently 0.5%
     uint256 public constant initMintPrice = 0.002 ether; // at 0
     uint256 public constant mintPriceMove = 0.002 ether / 16000;
-    uint256 constant CREATOR_PERCENT = 15;
-    uint256 constant CHARITY_PERCENT = 200;
+    uint256 constant CREATOR_PERCENT = 50;
+    uint256 constant CHARITY_PERCENT = 150;
     uint256 constant DENOMINATOR = 1000;
 
     // You technically do not need to keep tabs on the reserve
