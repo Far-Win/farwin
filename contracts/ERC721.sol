@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.0;
+pragma solidity 0.8.19;
 
 // import "../../GSN/Context.sol";
-import "./interfaces/IERC721.sol";
-import "./interfaces/IERC721Metadata.sol";
-import "./interfaces/IERC721Enumerable.sol";
-import "./interfaces/IERC721Receiver.sol";
+import "@openzeppelin/contracts/interfaces/IERC721.sol";
+import "@openzeppelin/contracts/interfaces/IERC721Metadata.sol";
+import "@openzeppelin/contracts/interfaces/IERC721Enumerable.sol";
+import "@openzeppelin/contracts/interfaces/IERC721Receiver.sol";
 import "./ERC165.sol";
-import "./utils/Ownable.sol";
-import "./utils/SafeMath.sol";
-import "./utils/Address.sol";
-import "./utils/EnumerableSet.sol";
-import "./utils/EnumerableMap.sol";
-import "./utils/Strings.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "erc721a/contracts/ERC721A.sol";
 
 /**
  * @title ERC721 Non-Fungible Token Standard basic implementation

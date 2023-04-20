@@ -13,7 +13,7 @@ import "hardhat-tracer";
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.7.0",
+    version: "0.8.19",
     settings: {
       optimizer: {
         enabled: true,
@@ -50,8 +50,9 @@ const config: HardhatUserConfig = {
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
     },
     polygonMainnet: {
-      url: "https://matic-mainnet-full-rpc.bwarelabs.com",
+      url: "https://polygon-rpc.com/",
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
+      gasPrice: "auto"
     },
     bscMainnet: {
       url: "https://bscrpc.com",

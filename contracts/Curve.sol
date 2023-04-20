@@ -1,19 +1,29 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.0;
+pragma solidity 0.8.19;
 
 import "./ERC721.sol";
-import "./utils/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./chainlink/VRFConsumerBase.sol";
+import 'abdk-libraries-solidity/ABDKMathQuad.sol';
 
 contract Curve is VRFConsumerBase {
     using SafeMath for uint256;
+    using ABDKMathQuad for bytes16;
+
     // linear bonding curve
     // 99.5% going into reserve.
     // 0.5% going to creator.
 
     bytes32 internal immutable keyHash;
     uint256 internal immutable fee;
+
+    bytes16 internal constant LMIN = 0x4002e000000000000000000000000000;
+    bytes16 internal constant LMAX = 0x3fff0000000000000000000000000000;
+    bytes16 internal constant T = 0x401124f8000000000000000000000000;
+    bytes16 internal constant b = 0x3ffb2a5cd80b02065168267ecaae600a;
+    bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000;
+
 
     struct Request {
         bool isMint;
@@ -29,7 +39,7 @@ contract Curve is VRFConsumerBase {
 
     // this is currently 0.5%
     uint256 public constant initMintPrice = 0.002 ether; // at 0
-    uint256 public constant mintPriceMove = 0.002 ether / 16000;
+    // uint256 public constant mintPriceMove = 0.002 ether / 16000;
     uint256 constant CREATOR_PERCENT = 50;
     uint256 constant CHARITY_PERCENT = 150;
     uint256 constant DENOMINATOR = 1000;
@@ -119,13 +129,14 @@ contract Curve is VRFConsumerBase {
     {
         require(!gameEnded, "C: Game ended");
         // you can only mint one at a time.
-        require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
+        // require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
         require(msg.value > 0, "C: No ETH sent");
 
         uint256 mintPrice = getCurrentPriceToMint();
         require(msg.value >= mintPrice, "C: Not enough ETH sent");
 
-        _requestId = requestRandomness(keyHash, fee);
+        // _requestId = requestRandomness(keyHash, fee);
+        _requestId = bytes32(block.timestamp);
         nftsCount++;
 
         // disburse
@@ -136,6 +147,16 @@ contract Curve is VRFConsumerBase {
         requests[_requestId]._address = msg.sender;
         requests[_requestId]._price = mintPrice;
         requests[_requestId]._reserve = reserve;
+
+        uint256 tokenId = nft.mint(
+                requests[_requestId]._address,
+                block.timestamp
+            );
+            emit Minted(
+                tokenId,
+                requests[_requestId]._price,
+                requests[_requestId]._reserve
+            );
 
         bool success;
         (success, ) = creator.call{
@@ -262,8 +283,41 @@ contract Curve is VRFConsumerBase {
 
     // if supply 0, mint price = 0.002
     function getCurrentPriceToMint() public view virtual returns (uint256) {
-        uint256 mintPrice = initMintPrice.add(nftsCount.mul(mintPriceMove));
-        return mintPrice;
+        return ABDKMathQuad.toUInt(ABDKMathQuad.mul(ABDKMathQuad.fromUInt(initMintPrice), ABDKMathQuad.add(
+                LMIN, 
+                ABDKMathQuad.mul(
+                    ABDKMathQuad.sub(LMAX, LMIN), 
+                    ABDKMathQuad.exp(
+                        ABDKMathQuad.neg(
+                            ABDKMathQuad.div(
+                                ABDKMathQuad.mul(ABDKMathQuad.fromUInt(nftsCount), ABDKMathQuad.fromUInt(nftsCount)),
+                                ABDKMathQuad.mul(b, T)
+                            )
+                        )
+                    )
+                )
+            )
+            ));
+    }
+
+    // if supply 0, mint price = 0.002
+    function getManualPriceToMint(uint256 nftCount, uint256 initPriceWei) public view virtual returns (uint256) {
+        return
+            ABDKMathQuad.toUInt(ABDKMathQuad.mul(ABDKMathQuad.fromUInt(initPriceWei), ABDKMathQuad.add(
+                LMIN, 
+                ABDKMathQuad.mul(
+                    ABDKMathQuad.sub(LMAX, LMIN), 
+                    ABDKMathQuad.exp(
+                        ABDKMathQuad.neg(
+                            ABDKMathQuad.div(
+                                ABDKMathQuad.mul(ABDKMathQuad.fromUInt(nftCount), ABDKMathQuad.fromUInt(nftCount)),
+                                ABDKMathQuad.mul(b, T)
+                            )
+                        )
+                    )
+                )
+            )
+            ));
     }
 
     // helper function for legibility
