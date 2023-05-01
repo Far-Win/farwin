@@ -37,6 +37,9 @@ contract Curve is VRFConsumerBase {
     uint256 public nftsCount;
     bool public gameEnded;
 
+    uint256 public ukrainianFlagPrizeMultiplier;
+    uint256 public rarePrizeMultiplier;
+
     // this is currently 0.5%
     uint256 public constant initMintPrice = 0.002 ether; // at 0
     // uint256 public constant mintPriceMove = 0.002 ether / 16000;
@@ -103,6 +106,16 @@ contract Curve is VRFConsumerBase {
         _;
     }
 
+    function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier) public {
+        require(msg.sender == admin, "Unauthorized");
+        require(_flagMultiplier != 0 && _rareMultiplier !=0, "Curve: Multipliers cannot be zero.");
+        require(2 <= _flagMultiplier <= 8, "Curve: Flag multiplier must be between 2 and 8");
+        require(5 <= _rareMultiplier <= 40, "Curve: Rare multiplier must be between 5 and 40");
+
+        ukrainianFlagPrizeMultiplier = _flagMultiplier;
+        rarePrizeMultiplier = _rareMultiplier;
+    }
+
     /*
         With one mint front-runned, a front-runner will make a loss.
         With linear price increases of 0.001, it's not profitable.
@@ -127,16 +140,14 @@ contract Curve is VRFConsumerBase {
         NftInitialized
         returns (bytes32 _requestId)
     {
-        require(!gameEnded, "C: Game ended");
         // you can only mint one at a time.
-        // require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
+        require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
         require(msg.value > 0, "C: No ETH sent");
 
         uint256 mintPrice = getCurrentPriceToMint();
         require(msg.value >= mintPrice, "C: Not enough ETH sent");
 
-        // _requestId = requestRandomness(keyHash, fee);
-        _requestId = bytes32(block.timestamp);
+        _requestId = requestRandomness(keyHash, fee);
         nftsCount++;
 
         // disburse
@@ -147,16 +158,6 @@ contract Curve is VRFConsumerBase {
         requests[_requestId]._address = msg.sender;
         requests[_requestId]._price = mintPrice;
         requests[_requestId]._reserve = reserve;
-
-        uint256 tokenId = nft.mint(
-                requests[_requestId]._address,
-                block.timestamp
-            );
-            emit Minted(
-                tokenId,
-                requests[_requestId]._price,
-                requests[_requestId]._reserve
-            );
 
         bool success;
         (success, ) = creator.call{
@@ -198,9 +199,9 @@ contract Curve is VRFConsumerBase {
             uint256 tokenId = requests[requestId]._tokenId;
 
             if (isRare(tokenId)) {
-                burnPrice = getCurrentPriceToBurn().mul(5);
+                burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
             } else if (isUkrainianFlag(tokenId)) {
-                burnPrice = getCurrentPriceToBurn().mul(2);
+                burnPrice = getCurrentPriceToBurn().mul(ukrainianFlagPrizeMultiplier);
             } else {
                 require(reserve > 0, "Reserve should be > 0");
 
