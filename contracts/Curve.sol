@@ -110,7 +110,7 @@ contract Curve is VRFConsumerBase {
         require(msg.sender == admin, "Unauthorized");
         require(_flagMultiplier != 0 && _rareMultiplier !=0, "Curve: Multipliers cannot be zero.");
         require(2 <= _flagMultiplier && _flagMultiplier <= 8, "Curve: Flag multiplier must be between 2 and 8");
-        require(5 <= _rareMultiplier && _flagMultiplier <= 40, "Curve: Rare multiplier must be between 5 and 40");
+        require(5 <= _rareMultiplier && _rareMultiplier <= 40, "Curve: Rare multiplier must be between 5 and 40");
 
         ukrainianFlagPrizeMultiplier = _flagMultiplier;
         rarePrizeMultiplier = _rareMultiplier;
@@ -292,6 +292,26 @@ contract Curve is VRFConsumerBase {
                         ABDKMathQuad.neg(
                             ABDKMathQuad.div(
                                 ABDKMathQuad.mul(ABDKMathQuad.fromUInt(nftsCount), ABDKMathQuad.fromUInt(nftsCount)),
+                                ABDKMathQuad.mul(b, T)
+                            )
+                        )
+                    )
+                )
+            )
+            ));
+    }
+
+    // if supply 0, mint price = 0.002
+    function getManualPriceToMint(uint256 nftCount, uint256 initPriceWei) public view virtual returns (uint256) {
+        return
+            ABDKMathQuad.toUInt(ABDKMathQuad.mul(ABDKMathQuad.fromUInt(initPriceWei), ABDKMathQuad.add(
+                LMIN, 
+                ABDKMathQuad.mul(
+                    ABDKMathQuad.sub(LMAX, LMIN), 
+                    ABDKMathQuad.exp(
+                        ABDKMathQuad.neg(
+                            ABDKMathQuad.div(
+                                ABDKMathQuad.mul(ABDKMathQuad.fromUInt(nftCount), ABDKMathQuad.fromUInt(nftCount)),
                                 ABDKMathQuad.mul(b, T)
                             )
                         )
