@@ -1,19 +1,30 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.7.0;
+pragma solidity 0.8.19;
 
 import "./ERC721.sol";
-import "./utils/SafeMath.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./chainlink/VRFConsumerBase.sol";
+import 'abdk-libraries-solidity/ABDKMathQuad.sol';
 
-contract Curve is VRFConsumerBase {
+contract Curve is VRFConsumerBase, Ownable {
     using SafeMath for uint256;
+    using ABDKMathQuad for bytes16;
+
     // linear bonding curve
     // 99.5% going into reserve.
     // 0.5% going to creator.
 
     bytes32 internal immutable keyHash;
     uint256 internal immutable fee;
+
+    bytes16 internal constant LMIN = 0x40010000000000000000000000000000;
+    bytes16 internal constant LMAX = 0x3fff0000000000000000000000000000;
+    bytes16 internal constant T = 0x401124f8000000000000000000000000;
+    bytes16 internal constant b = 0x3ffb2a5cd80b02065168267ecaae600a;
+    bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000;
+
 
     struct Request {
         bool isMint;
@@ -27,9 +38,12 @@ contract Curve is VRFConsumerBase {
     uint256 public nftsCount;
     bool public gameEnded;
 
+    uint256 public ukrainianFlagPrizeMultiplier;
+    uint256 public rarePrizeMultiplier;
+
     // this is currently 0.5%
-    uint256 public constant initMintPrice = 0.002 ether; // at 0
-    uint256 public constant mintPriceMove = 0.002 ether / 16000;
+    uint256 public constant initMintPrice = 0.05 ether; // at 0
+    // uint256 public constant mintPriceMove = 0.002 ether / 16000;
     uint256 constant CREATOR_PERCENT = 50;
     uint256 constant CHARITY_PERCENT = 150;
     uint256 constant DENOMINATOR = 1000;
@@ -91,6 +105,15 @@ contract Curve is VRFConsumerBase {
     modifier NftInitialized() {
         require(address(nft) != address(0), "NFT not initialized");
         _;
+    }
+
+    function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier) public onlyOwner {
+        require(_flagMultiplier != 0 && _rareMultiplier !=0, "Curve: Multipliers cannot be zero.");
+        require(2 <= _flagMultiplier && _flagMultiplier <= 8, "Curve: Flag multiplier must be between 2 and 8");
+        require(5 <= _rareMultiplier && _rareMultiplier <= 40, "Curve: Rare multiplier must be between 5 and 40");
+
+        ukrainianFlagPrizeMultiplier = _flagMultiplier;
+        rarePrizeMultiplier = _rareMultiplier;
     }
 
     /*
@@ -177,9 +200,9 @@ contract Curve is VRFConsumerBase {
             uint256 tokenId = requests[requestId]._tokenId;
 
             if (isRare(tokenId)) {
-                burnPrice = getCurrentPriceToBurn().mul(5);
+                burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
             } else if (isUkrainianFlag(tokenId)) {
-                burnPrice = getCurrentPriceToBurn().mul(2);
+                burnPrice = getCurrentPriceToBurn().mul(ukrainianFlagPrizeMultiplier);
             } else {
                 require(reserve > 0, "Reserve should be > 0");
 
@@ -262,8 +285,21 @@ contract Curve is VRFConsumerBase {
 
     // if supply 0, mint price = 0.002
     function getCurrentPriceToMint() public view virtual returns (uint256) {
-        uint256 mintPrice = initMintPrice.add(nftsCount.mul(mintPriceMove));
-        return mintPrice;
+        return ABDKMathQuad.toUInt(ABDKMathQuad.mul(ABDKMathQuad.fromUInt(initMintPrice), ABDKMathQuad.add(
+                LMIN, 
+                ABDKMathQuad.mul(
+                    ABDKMathQuad.sub(LMAX, LMIN), 
+                    ABDKMathQuad.exp(
+                        ABDKMathQuad.neg(
+                            ABDKMathQuad.div(
+                                ABDKMathQuad.mul(ABDKMathQuad.fromUInt(nftsCount), ABDKMathQuad.fromUInt(nftsCount)),
+                                ABDKMathQuad.mul(b, T)
+                            )
+                        )
+                    )
+                )
+            )
+            ));
     }
 
     // helper function for legibility
@@ -280,8 +316,7 @@ contract Curve is VRFConsumerBase {
         return burnPrice;
     }
 
-    function initNFT(ERC721 _nft) external {
-        require(msg.sender == admin, "Unauthorized");
+    function initNFT(ERC721 _nft) external onlyOwner {
         require(address(nft) == address(0), "Already initiated");
 
         nft = _nft;

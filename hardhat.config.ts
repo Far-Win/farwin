@@ -10,10 +10,12 @@ import "hardhat-deploy";
 import "hardhat-deploy-ethers";
 import "hardhat-abi-exporter";
 import "hardhat-tracer";
+import "@nomiclabs/hardhat-etherscan";
+
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.7.0",
+    version: "0.8.19",
     settings: {
       optimizer: {
         enabled: true,
@@ -50,8 +52,9 @@ const config: HardhatUserConfig = {
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
     },
     polygonMainnet: {
-      url: "https://matic-mainnet-full-rpc.bwarelabs.com",
+      url: "https://polygon-rpc.com/",
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
+      gasPrice: "auto"
     },
     bscMainnet: {
       url: "https://bscrpc.com",
@@ -61,6 +64,10 @@ const config: HardhatUserConfig = {
   mocha: {
     timeout: 200000,
   },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
+  },
+
 };
 
 export default config;

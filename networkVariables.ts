@@ -19,8 +19,8 @@ const chainIds = {
   bobaTestnet: 28,
 };
 
-const creator = "0xeb610D4133477f1F4C7DE1787E0fbBD52d38dDe1";
-const charity = "0x5C02a2b417EE583D98343d4B25f0b95A4DC780Ff";
+const creator = "0x90dc58FA850541C854Bee547Db2eC9A8a626A037";
+const charity = "0xB1071D46989a3401dEE0Ba1D4157E0143B7c7a0f";
 
 // refer: https://docs.chain.link/docs/vrf-contracts/v1/
 export const BSCTestnet: ChainAddresses = {
@@ -34,8 +34,8 @@ export const BSCTestnet: ChainAddresses = {
 };
 
 export const PolygonTestnet: ChainAddresses = {
-  vrfCoordinatorAddress: "0x326C977E6efc84E512bB9C30f76E30c160eD06FB",
-  linkTokenAddress: "0x8C7382F9D8f56b33781fE506E897a4F1e2d17255",
+  vrfCoordinatorAddress: "0x8C7382F9D8f56b33781fE506E897a4F1e2d17255",
+  linkTokenAddress: "0x326C977E6efc84E512bB9C30f76E30c160eD06FB",
   vrfKeyHash:
     "0x6e75b569a01ef56d18cab6a8e71e6600d6ce853834d4a5748b720d06f878b3a4",
   vrfFee: utils.parseEther("0.0001").toString(),
