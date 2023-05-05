@@ -10,6 +10,8 @@ import "hardhat-deploy";
 import "hardhat-deploy-ethers";
 import "hardhat-abi-exporter";
 import "hardhat-tracer";
+import "@nomiclabs/hardhat-etherscan";
+
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -62,6 +64,10 @@ const config: HardhatUserConfig = {
   mocha: {
     timeout: 200000,
   },
+  etherscan: {
+    apiKey: process.env.ETHERSCAN_API_KEY,
+  },
+
 };
 
 export default config;

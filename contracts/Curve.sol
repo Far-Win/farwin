@@ -4,10 +4,11 @@ pragma solidity 0.8.19;
 
 import "./ERC721.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./chainlink/VRFConsumerBase.sol";
 import 'abdk-libraries-solidity/ABDKMathQuad.sol';
 
-contract Curve is VRFConsumerBase {
+contract Curve is VRFConsumerBase, Ownable {
     using SafeMath for uint256;
     using ABDKMathQuad for bytes16;
 
@@ -106,8 +107,7 @@ contract Curve is VRFConsumerBase {
         _;
     }
 
-    function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier) public {
-        require(msg.sender == admin, "Unauthorized");
+    function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier) public onlyOwner {
         require(_flagMultiplier != 0 && _rareMultiplier !=0, "Curve: Multipliers cannot be zero.");
         require(2 <= _flagMultiplier && _flagMultiplier <= 8, "Curve: Flag multiplier must be between 2 and 8");
         require(5 <= _rareMultiplier && _rareMultiplier <= 40, "Curve: Rare multiplier must be between 5 and 40");
@@ -140,6 +140,7 @@ contract Curve is VRFConsumerBase {
         NftInitialized
         returns (bytes32 _requestId)
     {
+        require(!gameEnded, "C: Game ended");
         // you can only mint one at a time.
         require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
         require(msg.value > 0, "C: No ETH sent");
@@ -315,8 +316,7 @@ contract Curve is VRFConsumerBase {
         return burnPrice;
     }
 
-    function initNFT(ERC721 _nft) external {
-        require(msg.sender == admin, "Unauthorized");
+    function initNFT(ERC721 _nft) external onlyOwner {
         require(address(nft) == address(0), "Already initiated");
 
         nft = _nft;
