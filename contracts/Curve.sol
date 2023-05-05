@@ -41,7 +41,7 @@ contract Curve is VRFConsumerBase {
     uint256 public rarePrizeMultiplier;
 
     // this is currently 0.5%
-    uint256 public constant initMintPrice = 0.002 ether; // at 0
+    uint256 public constant initMintPrice = 0.05 ether; // at 0
     // uint256 public constant mintPriceMove = 0.002 ether / 16000;
     uint256 constant CREATOR_PERCENT = 50;
     uint256 constant CHARITY_PERCENT = 150;
@@ -292,26 +292,6 @@ contract Curve is VRFConsumerBase {
                         ABDKMathQuad.neg(
                             ABDKMathQuad.div(
                                 ABDKMathQuad.mul(ABDKMathQuad.fromUInt(nftsCount), ABDKMathQuad.fromUInt(nftsCount)),
-                                ABDKMathQuad.mul(b, T)
-                            )
-                        )
-                    )
-                )
-            )
-            ));
-    }
-
-    // if supply 0, mint price = 0.002
-    function getManualPriceToMint(uint256 nftCount, uint256 initPriceWei) public view virtual returns (uint256) {
-        return
-            ABDKMathQuad.toUInt(ABDKMathQuad.mul(ABDKMathQuad.fromUInt(initPriceWei), ABDKMathQuad.add(
-                LMIN, 
-                ABDKMathQuad.mul(
-                    ABDKMathQuad.sub(LMAX, LMIN), 
-                    ABDKMathQuad.exp(
-                        ABDKMathQuad.neg(
-                            ABDKMathQuad.div(
-                                ABDKMathQuad.mul(ABDKMathQuad.fromUInt(nftCount), ABDKMathQuad.fromUInt(nftCount)),
                                 ABDKMathQuad.mul(b, T)
                             )
                         )
