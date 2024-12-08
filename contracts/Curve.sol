@@ -2,10 +2,12 @@
 
 pragma solidity 0.8.19;
 
-import "./ERC721.sol";
+import 'abdk-libraries-solidity/ABDKMathQuad.sol';
+import "witnet-solidity-bridge/contracts/interfaces/IWitnetRandomness.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import 'abdk-libraries-solidity/ABDKMathQuad.sol';
+
+import "./ERC721.sol";
 
 contract Curve is Ownable {
     using SafeMath for uint256;
@@ -16,7 +18,6 @@ contract Curve is Ownable {
     // 0.5% going to creator.
 
     bytes32 internal immutable keyHash;
-    uint256 internal immutable fee;
 
     bytes16 internal constant LMIN = 0x40010000000000000000000000000000;
     bytes16 internal constant LMAX = 0x3fff0000000000000000000000000000;
@@ -24,17 +25,11 @@ contract Curve is Ownable {
     bytes16 internal constant b = 0x3ffb2a5cd80b02065168267ecaae600a;
     bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000;
 
-    struct Request {
-        bool isMint;
-        address _address;
-        uint256 _price;
-        uint256 _reserve;
-        uint256 _tokenId;
-    }
+    enum State { Paused, Active, Ended }
 
-    mapping(bytes32 => Request) public requests;
+    uint256 public lastBlockSync;
     uint256 public nftsCount;
-    bool public gameEnded;
+    State public gameState;
 
     uint256 public ukrainianFlagPrizeMultiplier;
     uint256 public rarePrizeMultiplier;
@@ -53,6 +48,8 @@ contract Curve is Ownable {
 
     address payable public immutable creator;
     address payable public immutable charity;
+
+    IWitnetRandomness immutable public witnet;
 
     ERC721 public nft;
 
@@ -80,19 +77,19 @@ contract Curve is Ownable {
         address payable _charity,
         address _coordinator,
         address _oracle,
-        bytes32 _keyHash,
-        uint256 _vrfFee
+        bytes32 _keyHash
     ) {
         require(_creator != address(0));
         require(_charity != address(0));
+        require(_oracle != address(0));
 
         creator = _creator;
         charity = _charity;
+        admin = msg.sender;
 
         keyHash = _keyHash;
-        fee = _vrfFee; // (Varies by network)
 
-        admin = msg.sender;
+        witnet = IWitnetRandomness(_oracle);
     }
 
     modifier NftInitialized() {
@@ -131,9 +128,10 @@ contract Curve is Ownable {
         payable
         virtual
         NftInitialized
-        returns (bytes32 _requestId)
+        returns (uint256 _tokenId)
     {
-        require(!gameEnded, "C: Game ended");
+        require(gameState != State.Active, "C: Game ended");
+
         // you can only mint one at a time.
         require(msg.value > 0, "C: No ETH sent");
 
@@ -142,16 +140,9 @@ contract Curve is Ownable {
 
         nftsCount++;
 
-        _requestId = keccak256(abi.encodePacked(block.number, nftsCount));
-
         // disburse
         uint256 reserveCut = getReserveCut();
         reserve = reserve.add(reserveCut);
-
-        requests[_requestId].isMint = true;
-        requests[_requestId]._address = msg.sender;
-        requests[_requestId]._price = mintPrice;
-        requests[_requestId]._reserve = reserve;
 
         bool success;
         (success, ) = creator.call{
@@ -169,66 +160,60 @@ contract Curve is Ownable {
             require(success, "Unable to send buffer back");
         }
 
-        return _requestId;
-    }
+        bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
 
-    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal {
-        if (requests[requestId].isMint) {
-            // mint first to increase supply
-            uint256 tokenId = nft.mint(
-                requests[requestId]._address,
-                randomness
-            );
-            emit Minted(
-                tokenId,
-                requests[requestId]._price,
-                requests[requestId]._reserve
-            );
-        } else {
-            // Burn
-            uint256 burnPrice;
-            uint256 tokenId = requests[requestId]._tokenId;
+        require(randomness != bytes32(""), "C: Invalid randomness");
 
-            if (isRare(tokenId)) {
-                burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
-            } else if (isUkrainianFlag(tokenId)) {
-                burnPrice = getCurrentPriceToBurn().mul(ukrainianFlagPrizeMultiplier);
-            } else {
-                require(reserve > 0, "Reserve should be > 0");
+        // mint first to increase supply
+        _tokenId = nft.mint(msg.sender, uint256(randomness));
 
-                string memory lotteryImage = nft.generateSVGofTokenById(
-                    randomness
-                );
-                string memory tokenImage = nft.generateSVGofTokenById(tokenId);
-                if (
-                    keccak256(abi.encodePacked(lotteryImage)) ==
-                    keccak256(abi.encodePacked(tokenImage))
-                ) {
-                    burnPrice = reserve;
-                    gameEnded = true;
-                    emit Lottery(tokenId, randomness, true, burnPrice);
-                }
-            }
-
-            nft.burn(requests[requestId]._address, tokenId);
-            nftsCount--;
-            emit Lottery(tokenId, randomness, false, burnPrice);
-
-            reserve = reserve.sub(burnPrice);
-            (bool success, ) = requests[requestId]._address.call{
-                value: burnPrice
-            }("");
-            require(success, "Unable to send burnPrice");
-
-            emit Burned(tokenId, burnPrice, reserve);
-        }
+        requestRandomness();
+        
+        emit Minted(_tokenId, mintPrice, reserve);
     }
 
     function burn(uint256 tokenId) external virtual NftInitialized {
-        bytes32 _requestId = keccak256(abi.encodePacked(block.number, tokenId));
+        uint256 burnPrice;
+        bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
 
-        requests[_requestId]._address = msg.sender;
-        requests[_requestId]._tokenId = tokenId;
+        require(randomness != bytes32(""), "C: Invalid randomness");
+
+        if (isRare(tokenId)) {
+          burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
+        } else if (isUkrainianFlag(tokenId)) {
+          burnPrice = getCurrentPriceToBurn().mul(ukrainianFlagPrizeMultiplier);
+        } else {
+          require(reserve > 0, "Reserve should be > 0");
+
+          string memory lotteryImage = nft.generateSVGofTokenById(
+              uint256(randomness)
+          );
+          string memory tokenImage = nft.generateSVGofTokenById(tokenId);
+          
+          if (
+              keccak256(abi.encodePacked(lotteryImage)) ==
+              keccak256(abi.encodePacked(tokenImage))
+          ) {
+              burnPrice = reserve;
+              gameState = State.Ended;
+              emit Lottery(tokenId, uint256(randomness), true, burnPrice);
+            } 
+        }
+
+        nft.burn(msg.sender, uint256(tokenId));
+        nftsCount--;
+        
+        emit Lottery(tokenId, uint256(randomness), false, burnPrice);
+
+        requestRandomness();
+
+        reserve = reserve.sub(burnPrice);
+        
+        (bool success, ) = msg.sender.call{ value: burnPrice }("");
+        
+        require(success, "Unable to send burnPrice");
+
+        emit Burned(tokenId, burnPrice, reserve);
     }
 
     function isRare(uint256 tokenId) public pure returns (bool) {
@@ -306,9 +291,25 @@ contract Curve is Ownable {
         return burnPrice;
     }
 
-    function initNFT(ERC721 _nft) external onlyOwner {
+    function initialise(ERC721 _nft) external payable onlyOwner {
         require(address(nft) == address(0), "Already initiated");
+        require(lastBlockSync != 0, "Already synced");
 
+        requestRandomness();
+
+        gameState = State.Active;
         nft = _nft;
+    }
+
+    function requestRandomness() public payable {
+      require(msg.value > 0, "Invalid value for query");
+
+      uint256 fee = witnet.randomize{ value: msg.value }();
+
+      if (fee < msg.value) {
+          payable(msg.sender).transfer(msg.value - fee);
+      }
+
+      lastBlockSync = block.number;
     }
 }
