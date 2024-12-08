@@ -5,10 +5,9 @@ pragma solidity 0.8.19;
 import "./ERC721.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./chainlink/VRFConsumerBase.sol";
 import 'abdk-libraries-solidity/ABDKMathQuad.sol';
 
-contract Curve is VRFConsumerBase, Ownable {
+contract Curve is Ownable {
     using SafeMath for uint256;
     using ABDKMathQuad for bytes16;
 
@@ -24,7 +23,6 @@ contract Curve is VRFConsumerBase, Ownable {
     bytes16 internal constant T = 0x401124f8000000000000000000000000;
     bytes16 internal constant b = 0x3ffb2a5cd80b02065168267ecaae600a;
     bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000;
-
 
     struct Request {
         bool isMint;
@@ -81,15 +79,10 @@ contract Curve is VRFConsumerBase, Ownable {
         address payable _creator,
         address payable _charity,
         address _coordinator,
-        address _link,
+        address _oracle,
         bytes32 _keyHash,
         uint256 _vrfFee
-    )
-        VRFConsumerBase(
-            _coordinator, // VRF Coordinator
-            _link // LINK Token
-        )
-    {
+    ) {
         require(_creator != address(0));
         require(_charity != address(0));
 
@@ -142,14 +135,14 @@ contract Curve is VRFConsumerBase, Ownable {
     {
         require(!gameEnded, "C: Game ended");
         // you can only mint one at a time.
-        require(LINK.balanceOf(address(this)) >= fee, "C: Not enough LINK");
         require(msg.value > 0, "C: No ETH sent");
 
         uint256 mintPrice = getCurrentPriceToMint();
         require(msg.value >= mintPrice, "C: Not enough ETH sent");
 
-        _requestId = requestRandomness(keyHash, fee);
         nftsCount++;
+
+        _requestId = keccak256(abi.encodePacked(block.number, nftsCount));
 
         // disburse
         uint256 reserveCut = getReserveCut();
@@ -179,10 +172,7 @@ contract Curve is VRFConsumerBase, Ownable {
         return _requestId;
     }
 
-    function fulfillRandomness(bytes32 requestId, uint256 randomness)
-        internal
-        override
-    {
+    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal {
         if (requests[requestId].isMint) {
             // mint first to increase supply
             uint256 tokenId = nft.mint(
@@ -235,7 +225,7 @@ contract Curve is VRFConsumerBase, Ownable {
     }
 
     function burn(uint256 tokenId) external virtual NftInitialized {
-        bytes32 _requestId = requestRandomness(keyHash, fee);
+        bytes32 _requestId = keccak256(abi.encodePacked(block.number, tokenId));
 
         requests[_requestId]._address = msg.sender;
         requests[_requestId]._tokenId = tokenId;
