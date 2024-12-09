@@ -17,8 +17,6 @@ contract Curve is Ownable {
     // 99.5% going into reserve.
     // 0.5% going to creator.
 
-    bytes32 internal immutable keyHash;
-
     bytes16 internal constant LMIN = 0x40010000000000000000000000000000;
     bytes16 internal constant LMAX = 0x3fff0000000000000000000000000000;
     bytes16 internal constant T = 0x401124f8000000000000000000000000;
@@ -75,10 +73,8 @@ contract Curve is Ownable {
     constructor(
         address payable _creator,
         address payable _charity,
-        address _coordinator,
-        address _oracle,
-        bytes32 _keyHash
-    ) {
+        address _oracle
+    ) public {
         require(_creator != address(0));
         require(_charity != address(0));
         require(_oracle != address(0));
@@ -86,8 +82,6 @@ contract Curve is Ownable {
         creator = _creator;
         charity = _charity;
         admin = msg.sender;
-
-        keyHash = _keyHash;
 
         witnet = IWitnetRandomness(_oracle);
     }
@@ -293,7 +287,7 @@ contract Curve is Ownable {
 
     function initialise(ERC721 _nft) external payable onlyOwner {
         require(address(nft) == address(0), "Already initiated");
-        require(lastBlockSync != 0, "Already synced");
+        require(lastBlockSync == 0, "Already synced");
 
         requestRandomness();
 

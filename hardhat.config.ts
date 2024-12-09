@@ -33,13 +33,15 @@ const config: HardhatUserConfig = {
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
     },
     hardhat: {
-      // forking: {
-      //   url: "https://matic-mainnet-full-rpc.bwarelabs.com",
-      // },
+      forking: {
+        url: "https://gateway.tenderly.co/public/sepolia",
+        blockNumber: 7140692,
+        ignoreUnknownTxType: true
+      },
       accounts: [
         {
           privateKey: process.env.DEPLOYER_PRIVATE_KEY!,
-          balance: parseEther("100").toString(),
+          balance: parseEther("10000").toString(),
         },
       ],
     },

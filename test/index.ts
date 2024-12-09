@@ -18,43 +18,32 @@ describe("Curve Contract", () => {
   beforeEach(async () => {
     [owner, creator, charity, user] = await ethers.getSigners();
 
-    const { chainId } = await ethers.getDefaultProvider().getNetwork();
+    const network = await ethers.getDefaultProvider().getNetwork();
 
     // Mock dependencies
-    const WitnetMock = await ethers.getContractFactory("IWitnetRandomness");
     const ERC721Mock = await ethers.getContractFactory("ERC721");
 
-    nft = await ERC721Mock.deploy("TestNFT", "TNFT");
-
     const Curve = await ethers.getContractFactory("Curve");
+    const addresses = ORACLE_MAP[network.chainId];
 
-    curve = await Curve.deploy(
-      creator.address,
-      charity.address,
-      ethers.constants.AddressZero,
-      ORACLE_MAP[chainId].address,
-      ethers.utils.formatBytes32String("testKeyHash")
-    );
-
-    // Initialize NFT
-    await curve.initialise(nft.address);
+    curve = await Curve.deploy(addresses?.creator, addresses?.charity, addresses?.address);
+    nft = await ERC721Mock.deploy("TestNFT", "TNFT", "test.com/", curve.address);
   });
 
   describe("Minting", () => {
-    it("should prevent minting when game has ended", async () => {
-      // Simulate game ending
-      await curve.connect(owner).burn(1);
-
+    it("should prevent minting when game has not started", async () => {
       await expect(
-        curve.connect(user).mint({ value: ethers.utils.parseEther("0.1") })
-      ).to.be.revertedWith("C: Game ended");
+        curve.connect(owner).mint({ value: ethers.utils.parseEther("0.105") })
+      ).to.be.revertedWith("NFT not initialized");
     });
 
     it("should prevent minting with insufficient ETH", async () => {
+      await curve.connect(owner).initialise(nft.address, { value: ethers.utils.parseEther('0.005') });
       await expect(
-        curve.connect(user).mint({ value: ethers.utils.parseEther("0.001") })
+        curve.connect(user).mint({ value: ethers.utils.parseEther("0.006") })
       ).to.be.revertedWith("C: Not enough ETH sent");
     });
+
   });
 
   describe("Burning", () => {
@@ -68,7 +57,7 @@ describe("Curve Contract", () => {
       );
 
       // Mint token first
-      await curve.connect(user).mint({ value: ethers.utils.parseEther("0.1") });
+      await curve.connect(user).mint({ value: ethers.utils.parseEther("0.105") });
 
       const initialBalance = await user.getBalance();
       await curve.connect(user).burn(rareTokenId);

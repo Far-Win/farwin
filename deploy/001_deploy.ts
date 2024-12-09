@@ -1,7 +1,7 @@
 import { HardhatRuntimeEnvironment, Network } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { utils } from "ethers";
-import { chainIdToAddresses } from "../networkVariables";
+import ORACLE_MAP from "../networkVariables";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments, getNamedAccounts } = hre;
@@ -10,16 +10,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await getNamedAccounts();
   // get current chainId
   const chainId = parseInt(await hre.getChainId());
-  const addresses = chainIdToAddresses[chainId];
+  const addresses = ORACLE_MAP[chainId];
 
   const curve = await deploy("Curve", {
     args: [
       addresses.creator,
       addresses.charity,
-      addresses.vrfCoordinatorAddress,
-      addresses.linkTokenAddress,
-      addresses.vrfKeyHash,
-      addresses.vrfFee,
+      addresses.address
     ],
     from: deployer,
     log: true,
@@ -34,10 +31,11 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await execute(
     "Curve",
     {
+      value: utils.parseEther('0.05'),
       from: deployer,
       log: true,
     },
-    "initNFT",
+    "initialise",
     nft.address
   );
 };
