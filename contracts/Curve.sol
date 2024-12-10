@@ -295,8 +295,6 @@ contract Curve is Ownable {
     }
 
     function requestRandomness() public payable {
-      require(msg.value > 0, "Invalid value for query");
-
       uint256 fee = witnet.randomize{ value: msg.value }();
 
       if (fee < msg.value) {

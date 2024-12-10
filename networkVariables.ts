@@ -18,13 +18,21 @@ const creator = "0x90dc58FA850541C854Bee547Db2eC9A8a626A037";
 const charity = "0xB1071D46989a3401dEE0Ba1D4157E0143B7c7a0f";
 
 export const EthereumMainnet: ChainAddresses = {
-  address: '0xC0FFEE98AD1434aCbDB894BbB752e138c1006fAB',
+  oracle: '0xC0FFEE98AD1434aCbDB894BbB752e138c1006fAB',
+  creator,
+  charity
+}
+
+export const SepoliaTestnet: ChainAddress = {
+  oracle: '0xC0FFEE98AD1434aCbDB894BbB752e138c1006fAB',
+  lottery: '0xC9F3cE94dE82A20746005ce0794d0b41D5339C62',
+  collection: '0x6f43C3842D9CeC5E959E285Ae7BaBe7073b5bb62',
   creator,
   charity
 }
 
 const HardhatLocal: ChainAddresses = {
-  address: ethers.constants.AddressZero,
+  oracle: ethers.constants.AddressZero,
   creator,
   charity
 };
@@ -33,7 +41,7 @@ export default {
   [chainIds.mainnet]: EthereumMainnet,
   [chainIds.hardhat]: HardhatLocal,
   [chainIds.base]: EthereumMainnet,
-  [chainIds.sepolia]: EthereumMainnet,
+  [chainIds.sepolia]: SepoliaTestnet,
   [chainIds.optimism]: EthereumMainnet,
   [chainIds.arbitrum]: EthereumMainnet,
 };

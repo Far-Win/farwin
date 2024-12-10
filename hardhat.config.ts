@@ -35,8 +35,8 @@ const config: HardhatUserConfig = {
     hardhat: {
       forking: {
         url: "https://gateway.tenderly.co/public/sepolia",
-        blockNumber: 7140692,
-        ignoreUnknownTxType: true
+        ignoreUnknownTxType: true,
+        blockNumber: 7240692
       },
       accounts: [
         {
@@ -45,23 +45,11 @@ const config: HardhatUserConfig = {
         },
       ],
     },
-    polygonTestnet: {
-      url: "https://rpc-mumbai.maticvigil.com",
+    sepolia: {
+      chainId: 11155111,
+      url: "https://sepolia.drpc.org",
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
-    },
-    bscTestnet: {
-      url: "https://data-seed-prebsc-2-s2.binance.org:8545",
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
-    },
-    polygonMainnet: {
-      url: "https://polygon-rpc.com/",
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
-      gasPrice: "auto"
-    },
-    bscMainnet: {
-      url: "https://bscrpc.com",
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
-    },
+    }
   },
   mocha: {
     timeout: 200000,

@@ -9,62 +9,115 @@ import ORACLE_MAP from "../networkVariables";
 describe("Curve Contract", () => {
   let curve: Contract;
   let nft: Contract;
+  let witnetFee: number;
+  let witnet: Contract;
   let chaindId: number;
   let owner: SignerWithAddress;
   let creator: SignerWithAddress;
   let charity: SignerWithAddress;
   let user: SignerWithAddress;
 
+  const parseEther = (value) => ethers.utils.parseEther(value).toString();
+
+  const waitUntilTimeout = (ms) => {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  };
+
+  const waitForRandomness = async () => {
+    const maxAttempts = 20;
+    const delayBetweenAttempts = 3000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const lastBlockSync = await curve.lastBlockSync();
+        const isReady = await witnet.isRandomized(lastBlockSync);
+
+        if (isReady) {
+          return true;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
+      } catch (error) {
+        console.error('Error checking randomness:', error);
+        throw error;
+      }
+    }
+  }
+
   before(async () => {
     [owner, creator, charity, user] = await ethers.getSigners();
 
-    const network = await ethers.getDefaultProvider().getNetwork();
-
-    // Mock dependencies
-    const ERC721Mock = await ethers.getContractFactory("ERC721");
-
-    const Curve = await ethers.getContractFactory("Curve");
+    const network = await ethers.provider.getNetwork();
     const addresses = ORACLE_MAP[network.chainId];
+    const feeData = await ethers.provider.getFeeData();
+    const latestBlock = await ethers.provider.getBlock("latest");
 
-    curve = await Curve.deploy(addresses?.creator, addresses?.charity, addresses?.address);
-    nft = await ERC721Mock.deploy("TestNFT", "TNFT", "test.com/", curve.address);
+    if (!addresses.lottery) {
+      const Curve = await ethers.getContractFactory("Curve");
+
+      curve = await Curve.deploy(addresses?.creator, addresses?.charity, addresses?.oracle);
+    } else {
+      curve = await ethers.getContractAt("Curve", addresses.lottery);
+    }
+    if (!addresses.collection) {
+      const ERC721Mock = await ethers.getContractFactory("ERC721");
+
+      nft = await ERC721Mock.deploy("TestNFT", "TNFT", "test.com/", curve.address);
+    } else {
+      nft = await ethers.getContractAt("ERC721", addresses.collection);
+    }
+
+    witnet = await ethers.getContractAt("IWitnetRandomness", addresses.oracle);
+    witnetFee = await witnet.estimateRandomizeFee(feeData.gasPrice);
   });
 
   describe("Minting", () => {
 
-    it("should prevent minting when game has not started", async () => {
-      await expect(
-        curve.connect(owner).mint({ value: ethers.utils.parseEther("0.001") })
-      ).to.be.revertedWith("NFT not initialized");
+    it("should be initialised", async () => {
+      const lastBlockSync = await curve.lastBlockSync();
+
+      if (lastBlockSync.toNumber() == 0) {
+        await curve.connect(owner).initialise(nft.address, { value: witnetFee })
+      }
     });
 
     it("should prevent minting with insufficient ETH", async () => {
-      await curve.connect(owner).initialise(nft.address, { value: ethers.utils.parseEther('0.001') });
+      await waitUntilTimeout(5000);
+      await waitForRandomness();
+
       await expect(
-        curve.connect(owner).mint({ value: ethers.utils.parseEther("0.015") })
+        curve.connect(owner).mint({ value: parseEther("0.01") + witnetFee })
       ).to.be.revertedWith("C: Not enough ETH sent");
     });
 
     it("should mint without conflict", async () => {
-      await curve.connect(owner).mint({ value: ethers.utils.parseEther("0.06") })
+      await waitUntilTimeout(5000);
+      await waitForRandomness();
+
+      await curve.connect(owner).mint({ value: parseEther("0.0500") + witnetFee });
+      await tx.wait();
     })
 
   });
 
   describe("Burning", () => {
     it("should handle rare token burning with prize multiplier", async () => {
-      // Set prize multipliers
+      await waitUntilTimeout(5000);
+      await waitForRandomness();
+
       await curve.connect(owner).setPrizeMultipliers(2, 10);
 
-      // Mock a rare token (assuming isRare logic)
       const rareTokenId = ethers.BigNumber.from(
         "0x0500000000000000000000000000000000000000000000000000000000000000"
       );
 
-      // Mint token first
-      await curve.connect(owner).mint({ value: ethers.utils.parseEther("0.105") });
+      await curve.connect(owner).mint({ value: parseEther("0.05") + witnetFee });
+
+      await waitUntilTimeout(5000);
+      await waitForRandomness();
 
       const initialBalance = await owner.getBalance();
+
       await curve.connect(owner).burn(rareTokenId);
 
       const finalBalance = await owner.getBalance();
@@ -75,7 +128,8 @@ describe("Curve Contract", () => {
       // Mock scenario to trigger invalid randomness
       await expect(
         curve.connect(user).burn(1)
-      ).to.be.revertedWith("C: Invalid randomness");
+      ).to.be.revertedWith("C: Randomness not ready");
+
     });
 
     it("should reward lottery the intended lottery winner", () => { });

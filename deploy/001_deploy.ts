@@ -16,7 +16,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [
       addresses.creator,
       addresses.charity,
-      addresses.address
+      addresses.oracle
     ],
     from: deployer,
     log: true,
@@ -31,7 +31,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await execute(
     "Curve",
     {
-      value: utils.parseEther('0.05'),
+      value: utils.parseEther('0.001'),
       from: deployer,
       log: true,
     },
