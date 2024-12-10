@@ -3,10 +3,10 @@
 pragma solidity 0.8.19;
 
 import 'abdk-libraries-solidity/ABDKMathQuad.sol';
-import "witnet-solidity-bridge/contracts/interfaces/IWitnetRandomness.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "./interfaces/IWitnetRandomnessV2.sol";
 import "./ERC721.sol";
 
 contract Curve is Ownable {
@@ -47,7 +47,7 @@ contract Curve is Ownable {
     address payable public immutable creator;
     address payable public immutable charity;
 
-    IWitnetRandomness immutable public witnet;
+    IWitnetRandomnessV2 immutable public witnet;
 
     ERC721 public nft;
 
@@ -83,7 +83,7 @@ contract Curve is Ownable {
         charity = _charity;
         admin = msg.sender;
 
-        witnet = IWitnetRandomness(_oracle);
+        witnet = IWitnetRandomnessV2(_oracle);
     }
 
     modifier NftInitialized() {
@@ -149,23 +149,18 @@ contract Curve is Ownable {
         }("");
         require(success, "Unable to send to charity");
 
-        uint256 buffer = msg.value.sub(mintPrice); // excess/padding/buffer
-        if (buffer > 0) {
-            (success, ) = msg.sender.call{value: buffer}("");
-            require(success, "Unable to send buffer back");
-        }
-
+        uint256 remainder = msg.value.sub(mintPrice); 
         bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
 
         // mint first to increase supply
         _tokenId = nft.mint(msg.sender, uint256(randomness));
 
-        requestRandomness();
+        requestRandomness(remainder);
         
         emit Minted(_tokenId, mintPrice, reserve);
     }
 
-    function burn(uint256 tokenId) external virtual NftInitialized {
+    function burn(uint256 tokenId) payable external virtual NftInitialized {
         require(witnet.isRandomized(lastBlockSync), "C: Randomness not ready");
 
         uint256 burnPrice;
@@ -198,7 +193,7 @@ contract Curve is Ownable {
         
         emit Lottery(tokenId, uint256(randomness), false, burnPrice);
 
-        requestRandomness();
+        requestRandomness(msg.value);
 
         reserve = reserve.sub(burnPrice);
         
@@ -284,21 +279,23 @@ contract Curve is Ownable {
         return burnPrice;
     }
 
-    function initialise(ERC721 _nft) external payable onlyOwner {
+    function initialise(ERC721 _nft, uint256 oracleFee) external payable onlyOwner {
         require(address(nft) == address(0), "Already initiated");
         require(lastBlockSync == 0, "Already synced");
 
-        requestRandomness();
+        requestRandomness(oracleFee);
 
         gameState = State.Active;
         nft = _nft;
     }
 
-    function requestRandomness() public payable {
-      uint256 fee = witnet.randomize{ value: msg.value }();
+    function requestRandomness(uint256 value) public payable {
+      require(msg.value >= value, "Insufficient randomness fee");
 
-      if (fee < msg.value) {
-          payable(msg.sender).transfer(msg.value - fee);
+      uint256 cost = witnet.randomize{ value: value }();
+
+      if (value > cost) {
+        payable(msg.sender).transfer(value - cost);
       }
 
       lastBlockSync = block.number;
