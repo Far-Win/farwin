@@ -124,7 +124,8 @@ contract Curve is Ownable {
         NftInitialized
         returns (uint256 _tokenId)
     {
-        require(gameState != State.Active, "C: Game ended");
+        require(gameState == State.Active, "C: Game ended");
+        require(witnet.isRandomized(lastBlockSync), "C: Randomness not ready");
 
         // you can only mint one at a time.
         require(msg.value > 0, "C: No ETH sent");
@@ -156,8 +157,6 @@ contract Curve is Ownable {
 
         bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
 
-        require(randomness != bytes32(""), "C: Invalid randomness");
-
         // mint first to increase supply
         _tokenId = nft.mint(msg.sender, uint256(randomness));
 
@@ -167,10 +166,10 @@ contract Curve is Ownable {
     }
 
     function burn(uint256 tokenId) external virtual NftInitialized {
+        require(witnet.isRandomized(lastBlockSync), "C: Randomness not ready");
+
         uint256 burnPrice;
         bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
-
-        require(randomness != bytes32(""), "C: Invalid randomness");
 
         if (isRare(tokenId)) {
           burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);

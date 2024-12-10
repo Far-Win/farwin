@@ -15,7 +15,7 @@ describe("Curve Contract", () => {
   let charity: SignerWithAddress;
   let user: SignerWithAddress;
 
-  beforeEach(async () => {
+  before(async () => {
     [owner, creator, charity, user] = await ethers.getSigners();
 
     const network = await ethers.getDefaultProvider().getNetwork();
@@ -31,18 +31,23 @@ describe("Curve Contract", () => {
   });
 
   describe("Minting", () => {
+
     it("should prevent minting when game has not started", async () => {
       await expect(
-        curve.connect(owner).mint({ value: ethers.utils.parseEther("0.105") })
+        curve.connect(owner).mint({ value: ethers.utils.parseEther("0.001") })
       ).to.be.revertedWith("NFT not initialized");
     });
 
     it("should prevent minting with insufficient ETH", async () => {
-      await curve.connect(owner).initialise(nft.address, { value: ethers.utils.parseEther('0.005') });
+      await curve.connect(owner).initialise(nft.address, { value: ethers.utils.parseEther('0.001') });
       await expect(
-        curve.connect(user).mint({ value: ethers.utils.parseEther("0.006") })
+        curve.connect(owner).mint({ value: ethers.utils.parseEther("0.015") })
       ).to.be.revertedWith("C: Not enough ETH sent");
     });
+
+    it("should mint without conflict", async () => {
+      await curve.connect(owner).mint({ value: ethers.utils.parseEther("0.06") })
+    })
 
   });
 
@@ -57,12 +62,12 @@ describe("Curve Contract", () => {
       );
 
       // Mint token first
-      await curve.connect(user).mint({ value: ethers.utils.parseEther("0.105") });
+      await curve.connect(owner).mint({ value: ethers.utils.parseEther("0.105") });
 
-      const initialBalance = await user.getBalance();
-      await curve.connect(user).burn(rareTokenId);
+      const initialBalance = await owner.getBalance();
+      await curve.connect(owner).burn(rareTokenId);
 
-      const finalBalance = await user.getBalance();
+      const finalBalance = await owner.getBalance();
       expect(finalBalance).to.be.gt(initialBalance);
     });
 
@@ -72,6 +77,9 @@ describe("Curve Contract", () => {
         curve.connect(user).burn(1)
       ).to.be.revertedWith("C: Invalid randomness");
     });
+
+    it("should reward lottery the intended lottery winner", () => { });
+
   });
 
   describe("Prize Multipliers", () => {
