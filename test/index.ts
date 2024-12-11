@@ -6,6 +6,13 @@ import { expect } from "chai";
 
 import ORACLE_MAP from "../networkVariables";
 
+const MINT_FEE = '50000000000000000';
+const INCORRECT_MINT_FEE = '10000000000000000';
+
+const BigNumber = (value) => ethers.BigNumber.from(value);
+
+const parseEther = (value) => ethers.utils.parseEther(value);
+
 describe("Curve Contract", () => {
   let curve: Contract;
   let nft: Contract;
@@ -18,7 +25,6 @@ describe("Curve Contract", () => {
   let charity: SignerWithAddress;
   let user: SignerWithAddress;
 
-  const parseEther = (value) => ethers.utils.parseEther(value).toString();
 
   const waitUntilTimeout = (ms) => {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -33,7 +39,7 @@ describe("Curve Contract", () => {
         const lastBlockSync = await curve.lastBlockSync();
         const isReady = await witnet.isRandomized(lastBlockSync);
 
-        if (isReady) {
+        if (isReady && lastBlockSync > 0) {
           return true;
         }
 
@@ -44,6 +50,11 @@ describe("Curve Contract", () => {
       }
     }
   }
+
+  beforeEach(async () => {
+    await waitUntilTimeout(5000);
+    await waitForRandomness();
+  })
 
   before(async () => {
     [owner, creator, charity, user] = await ethers.getSigners();
@@ -70,68 +81,54 @@ describe("Curve Contract", () => {
     witnet = await ethers.getContractAt("IWitnetRandomnessV2", addresses.oracle);
     proxy = await ethers.getContractAt("IWitnetProxy", addresses.proxy);
 
-
-    const gasPrice = feeData.gasPrice - ethers.BigNumber.from(100000);
+    const gasPrice = feeData.gasPrice;
     const baseFeeOverheadPercentage = await witnet.baseFeeOverheadPercentage();
 
     const proxyCallResult = await ethers.provider.call({
       to: addresses.proxy,
-      data: proxy.interface.encodeFunctionData('estimateBaseFee', [gasPrice, 34])
+      data: proxy.interface.encodeFunctionData('estimateBaseFeeWithCallback', [gasPrice, 300000])
     });
 
     // Then decode the result
-    const [estimatedBaseFee] = proxy.interface.decodeFunctionResult('estimateBaseFee', proxyCallResult);
+    const [estimatedBaseFee] = proxy.interface.decodeFunctionResult('estimateBaseFeeWithCallback', proxyCallResult);
     const witnetOracleFee = parseInt(
       (estimatedBaseFee * (100 + baseFeeOverheadPercentage)) / 100
     );
 
-    witnetFee = witnetOracleFee;
+    witnetFee = BigNumber(witnetOracleFee.toString());
   });
 
   describe("Minting", () => {
 
-    it('should randomise', async () => {
-      await witnet.randomize({ value: witnetFee, gasLimit: 300000 });
-    });
-
     it("should be initialised", async () => {
       const lastBlockSync = await curve.lastBlockSync();
 
-      if (lastBlockSync.toNumber() === 0) {
-        await curve.connect(owner).initialise(nft.address, witnetFee, { value: witnetFee })
+      if (lastBlockSync == 0) {
+        await curve.connect(owner).initialise(nft.address, witnetFee, { value: witnetFee, gasLimit: 300000 })
       }
     });
 
     it("should prevent minting with insufficient ETH", async () => {
-      await waitUntilTimeout(5000);
-      await waitForRandomness();
-
       await expect(
-        curve.connect(owner).mint({ value: parseEther("0.01") + witnetFee })
+        curve.connect(owner).mint({ value: BigNumber(INCORRECT_MINT_FEE).add(witnetFee) })
       ).to.be.revertedWith("C: Not enough ETH sent");
     });
 
     it("should mint without conflict", async () => {
-      await waitUntilTimeout(5000);
-      await waitForRandomness();
-
-      await curve.connect(owner).mint({ value: parseEther("0.0500") + witnetFee });
-    })
+      await curve.connect(owner).mint({ value: BigNumber(MINT_FEE).add(witnetFee), gasLimit: 600000 });
+    });
 
   });
 
   describe("Burning", () => {
     it("should handle rare token burning with prize multiplier", async () => {
-      await waitUntilTimeout(5000);
-      await waitForRandomness();
-
       await curve.connect(owner).setPrizeMultipliers(2, 10);
 
       const rareTokenId = ethers.BigNumber.from(
         "0x0500000000000000000000000000000000000000000000000000000000000000"
       );
 
-      await curve.connect(owner).mint({ value: parseEther("0.05") + witnetFee });
+      await curve.connect(owner).mint({ value: BigNumber(MINT_FEE).add(witnetFee) });
 
       await waitUntilTimeout(5000);
       await waitForRandomness();
