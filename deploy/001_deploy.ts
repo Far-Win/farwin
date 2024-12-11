@@ -31,12 +31,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await execute(
     "Curve",
     {
-      value: utils.parseEther('0.001'),
+      value: utils.parseEther('0.01'),
       from: deployer,
       log: true,
     },
     "initialise",
-    nft.address
+    nft.address,
+    utils.parseEther('0.01')
   );
 };
 export default func;

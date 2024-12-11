@@ -1,0 +1,7 @@
+pragma solidity 0.8.19;
+
+interface IWitnetProxy {
+
+  function estimateBaseFee(uint256 _gasPrice, uint16 _resultMaxSize) external returns (uint256);
+
+}

@@ -11,6 +11,7 @@ describe("Curve Contract", () => {
   let nft: Contract;
   let witnetFee: number;
   let witnet: Contract;
+  let proxy: Contract;
   let chaindId: number;
   let owner: SignerWithAddress;
   let creator: SignerWithAddress;
@@ -50,7 +51,6 @@ describe("Curve Contract", () => {
     const network = await ethers.provider.getNetwork();
     const addresses = ORACLE_MAP[network.chainId];
     const feeData = await ethers.provider.getFeeData();
-    const latestBlock = await ethers.provider.getBlock("latest");
 
     if (!addresses.lottery) {
       const Curve = await ethers.getContractFactory("Curve");
@@ -67,17 +67,38 @@ describe("Curve Contract", () => {
       nft = await ethers.getContractAt("ERC721", addresses.collection);
     }
 
-    witnet = await ethers.getContractAt("IWitnetRandomness", addresses.oracle);
-    witnetFee = await witnet.estimateRandomizeFee(feeData.gasPrice);
+    witnet = await ethers.getContractAt("IWitnetRandomnessV2", addresses.oracle);
+    proxy = await ethers.getContractAt("IWitnetProxy", addresses.proxy);
+
+
+    const gasPrice = feeData.gasPrice - ethers.BigNumber.from(100000);
+    const baseFeeOverheadPercentage = await witnet.baseFeeOverheadPercentage();
+
+    const proxyCallResult = await ethers.provider.call({
+      to: addresses.proxy,
+      data: proxy.interface.encodeFunctionData('estimateBaseFee', [gasPrice, 34])
+    });
+
+    // Then decode the result
+    const [estimatedBaseFee] = proxy.interface.decodeFunctionResult('estimateBaseFee', proxyCallResult);
+    const witnetOracleFee = parseInt(
+      (estimatedBaseFee * (100 + baseFeeOverheadPercentage)) / 100
+    );
+
+    witnetFee = witnetOracleFee;
   });
 
   describe("Minting", () => {
 
+    it('should randomise', async () => {
+      await witnet.randomize({ value: witnetFee, gasLimit: 300000 });
+    });
+
     it("should be initialised", async () => {
       const lastBlockSync = await curve.lastBlockSync();
 
-      if (lastBlockSync.toNumber() == 0) {
-        await curve.connect(owner).initialise(nft.address, { value: witnetFee })
+      if (lastBlockSync.toNumber() === 0) {
+        await curve.connect(owner).initialise(nft.address, witnetFee, { value: witnetFee })
       }
     });
 
@@ -95,7 +116,6 @@ describe("Curve Contract", () => {
       await waitForRandomness();
 
       await curve.connect(owner).mint({ value: parseEther("0.0500") + witnetFee });
-      await tx.wait();
     })
 
   });
@@ -118,7 +138,7 @@ describe("Curve Contract", () => {
 
       const initialBalance = await owner.getBalance();
 
-      await curve.connect(owner).burn(rareTokenId);
+      await curve.connect(owner).burn(rareTokenId, { value: witnetFee });
 
       const finalBalance = await owner.getBalance();
       expect(finalBalance).to.be.gt(initialBalance);
@@ -127,12 +147,12 @@ describe("Curve Contract", () => {
     it("should prevent burning with invalid randomness", async () => {
       // Mock scenario to trigger invalid randomness
       await expect(
-        curve.connect(user).burn(1)
+        curve.connect(user).burn(1, { value: witnetFee })
       ).to.be.revertedWith("C: Randomness not ready");
 
     });
 
-    it("should reward lottery the intended lottery winner", () => { });
+    it("should reward the intended lottery winner", () => { });
 
   });
 

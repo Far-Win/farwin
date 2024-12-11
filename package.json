@@ -19,8 +19,7 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.3.2",
-    "abdk-libraries-solidity": "^3.2.0",
-    "witnet-solidity-bridge": "^2.0.18"
+    "abdk-libraries-solidity": "^3.2.0"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
