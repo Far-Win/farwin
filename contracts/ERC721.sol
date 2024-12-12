@@ -149,7 +149,7 @@ contract ERC721 is
     function mint(address to, uint256 randomness)
         external
         virtual
-        returns (uint256 newTokenId)
+        returns (uint256)
     {
         require(msg.sender == curve, "FREEDOM: Minter is not the curve");
 
