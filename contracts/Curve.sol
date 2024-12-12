@@ -151,11 +151,12 @@ contract Curve is Ownable {
 
         uint256 remainder = msg.value.sub(mintPrice); 
         bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
+        uint256 entropy = uint256(randomness) % (2**256) - 1;
 
-        // mint first to increase supply
-        _tokenId = nft.mint(msg.sender, uint256(randomness));
-
+        // Debit remainder msg.value first
         requestRandomness(remainder);
+
+        _tokenId = nft.mint(msg.sender, entropy);
         
         emit Minted(_tokenId, mintPrice, reserve);
     }
@@ -165,6 +166,7 @@ contract Curve is Ownable {
 
         uint256 burnPrice;
         bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
+        uint256 entropy = uint256(randomness) % (2**256) - 1;
 
         if (isRare(tokenId)) {
           burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
@@ -173,9 +175,7 @@ contract Curve is Ownable {
         } else {
           require(reserve > 0, "Reserve should be > 0");
 
-          string memory lotteryImage = nft.generateSVGofTokenById(
-              uint256(randomness)
-          );
+          string memory lotteryImage = nft.generateSVGofTokenById(entropy);
           string memory tokenImage = nft.generateSVGofTokenById(tokenId);
           
           if (
@@ -184,7 +184,7 @@ contract Curve is Ownable {
           ) {
               burnPrice = reserve;
               gameState = State.Ended;
-              emit Lottery(tokenId, uint256(randomness), true, burnPrice);
+              emit Lottery(tokenId, entropy, true, burnPrice);
             } 
         }
 
