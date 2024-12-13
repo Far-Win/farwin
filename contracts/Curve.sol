@@ -144,7 +144,7 @@ contract Curve is Ownable {
         emit Roll(totalSupply, reserve);
     }
 
-    function reveal() isRandomnessReady isPhase(Epoch.Pending) public {
+    function reveal() isRandomnessReady isPhase(Epoch.Pending) public payable {
         require(isRolled, "C: Not rolled, must roll");
         require(winningTokenId == 0, "C: Winner already chosen");
 
@@ -152,6 +152,8 @@ contract Curve is Ownable {
 
         isRolled = false;
         winningTokenId = index;
+
+        requestRandomness(msg.value);
 
         emit Reveal(tokenIds[winningTokenId], index);
     }
@@ -176,24 +178,23 @@ contract Curve is Ownable {
         returns (uint256 _tokenId)
     {
         if (winningTokenId > 0) winningTokenId = 0;
-        
+
         uint256 mintPrice = getCurrentPriceToMint();
 
         require(msg.value > 0, "C: No ETH sent");
         require(msg.value >= mintPrice, "C: Not enough ETH sent");
 
-        // disburse
+        uint256 creatorCut = mintPrice.mul(CREATOR_PERCENT).div(DENOMINATOR);
+        uint256 charityCut = mintPrice.mul(CHARITY_PERCENT).div(DENOMINATOR);
         uint256 reserveCut = getReserveCut();
+
         reserve = reserve.add(reserveCut);
 
         bool success;
-        (success, ) = creator.call{
-            value: mintPrice.mul(CREATOR_PERCENT).div(DENOMINATOR)
-        }("");
+
+        (success, ) = creator.call{ value: creatorCut }("");
         require(success, "Unable to send to creator");
-        (success, ) = charity.call{
-            value: mintPrice.mul(CHARITY_PERCENT).div(DENOMINATOR)
-        }("");
+        (success, ) = charity.call{ value: charityCut }("");
         require(success, "Unable to send to charity");
 
         uint256 remainder = msg.value.sub(mintPrice); 
@@ -235,11 +236,11 @@ contract Curve is Ownable {
         uint256 winningId = tokenIds[winningTokenId];
 
         delete tokenIds[totalSupply];
+        delete winningTokenId;
 
         totalSupply = totalSupply - 1;
         tokenIds[winningId] = lastId;
 
-        requestRandomness(msg.value);
         nft.burn(msg.sender, tokenId); 
 
         reserve = reserve.sub(burnPrice);
@@ -314,7 +315,7 @@ contract Curve is Ownable {
                     )
                 )
             )
-            ));
+        ));
     }
 
     // helper function for legibility
