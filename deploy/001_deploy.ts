@@ -14,9 +14,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const curve = await deploy("Curve", {
     args: [
+      addresses.oracle,
       addresses.creator,
-      addresses.charity,
-      addresses.oracle
+      addresses.charity
     ],
     from: deployer,
     log: true,
@@ -36,8 +36,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       log: true,
     },
     "initialise",
-    nft.address,
-    utils.parseEther('0.01')
+    nft.address
   );
 };
 export default func;

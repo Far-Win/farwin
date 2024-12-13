@@ -25,8 +25,8 @@ export const EthereumMainnet: ChainAddresses = {
 
 export const SepoliaTestnet: ChainAddress = {
   oracle: '0xC0FFEE98AD1434aCbDB894BbB752e138c1006fAB',
-  lottery: '0x4e0F0CEB066cd6B3fdfA18cbBC4EdbBc2b9DB887',
-  collection: '0x6f43C3842D9CeC5E959E285Ae7BaBe7073b5bb62',
+  lottery: '0x74C735b144EebB44b973D0690F73C5fAb1Bc3dF1',
+  collection: '0xB8af572fc90239fb4Cdb5800992eE3BFa857cc2E',
   proxy: '0x77703aE126B971c9946d562F41Dd47071dA00777',
   creator,
   charity

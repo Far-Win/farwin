@@ -16,6 +16,10 @@ contract Curve is Ownable {
     // linear bonding curve
     // 99.5% going into reserve.
     // 0.5% going to creator.
+    uint256 constant OPEN_EPOCH = 5 days;
+    uint256 constant PENDING_EPOCH = 1 days;
+    uint256 constant REDEEM_EPOCH = 1 days;
+    uint256 constant WEEKLY_CYCLE = OPEN_PERIOD + PENDING_PERIOD + CLOSED_PERIOD;
 
     bytes16 internal constant LMIN = 0x40010000000000000000000000000000;
     bytes16 internal constant LMAX = 0x3fff0000000000000000000000000000;
@@ -23,14 +27,9 @@ contract Curve is Ownable {
     bytes16 internal constant b = 0x3ffb2a5cd80b02065168267ecaae600a;
     bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000;
 
-    enum State { Paused, Active, Ended }
+    enum Epoch { Init, Open, Pending, Closed };
 
-    uint256 public lastBlockSync;
-    uint256 public nftsCount;
-    State public gameState;
-
-    uint256 public ukrainianFlagPrizeMultiplier;
-    uint256 public rarePrizeMultiplier;
+    mapping (uint16 => uint256) public tokenIds;
 
     // this is currently 0.5%
     uint256 public constant initMintPrice = 0.05 ether; // at 0
@@ -39,11 +38,20 @@ contract Curve is Ownable {
     uint256 constant CHARITY_PERCENT = 150;
     uint256 constant DENOMINATOR = 1000;
 
+    bool public hasRolled;
+    bool public hasStarted;
     // You technically do not need to keep tabs on the reserve
     // because it uses linear pricing
     // but useful to know off-hand. Especially because this.balance might not be the same as the actual reserve
     uint256 public reserve;
+    uint256 public winningTokenId;
 
+    uint256 public totalSupply;
+    uint256 public lastBlockSync;
+
+    uint256 public ukrainianFlagPrizeMultiplier;
+    uint256 public rarePrizeMultiplie;
+    
     address payable public immutable creator;
     address payable public immutable charity;
 
@@ -53,27 +61,39 @@ contract Curve is Ownable {
 
     address public immutable admin;
 
+    event Roll(
+      uint256 indexed totalNfts,
+      uint256 indexed reserveAtRoll
+    );
+
+    event Reveal(
+      uint256 indexed tokenId,
+      uint256 indexed entropyValue 
+    );
+
     event Minted(
         uint256 indexed tokenId,
         uint256 indexed pricePaid,
         uint256 indexed reserveAfterMint
     );
+
     event Burned(
         uint256 indexed tokenId,
         uint256 indexed priceReceived,
         uint256 indexed reserveAfterBurn
     );
+
     event Lottery(
+        bool isWinner,
         uint256 indexed tokenId,
         uint256 indexed lotteryId,
-        bool isWinner,
         uint256 indexed prizeAmount
     );
 
     constructor(
+        address oracle,
         address payable _creator,
         address payable _charity,
-        address _oracle
     ) public {
         require(_creator != address(0));
         require(_charity != address(0));
@@ -86,54 +106,89 @@ contract Curve is Ownable {
         witnet = IWitnetRandomnessV2(_oracle);
     }
 
-    modifier NftInitialized() {
-        require(address(nft) != address(0), "NFT not initialized");
+    modifier isPhase(Epoch memory e) {
+        require(currentEpoch() == e, "C: Invalid epoch");
         _;
     }
 
-    function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier) public onlyOwner {
-        require(_flagMultiplier != 0 && _rareMultiplier !=0, "Curve: Multipliers cannot be zero.");
-        require(2 <= _flagMultiplier && _flagMultiplier <= 8, "Curve: Flag multiplier must be between 2 and 8");
-        require(5 <= _rareMultiplier && _rareMultiplier <= 40, "Curve: Rare multiplier must be between 5 and 40");
+    modifier isInitialised() {
+        require(address(nft) != address(0), "C: Not initialised");
+        _;
+    }
 
-        ukrainianFlagPrizeMultiplier = _flagMultiplier;
-        rarePrizeMultiplier = _rareMultiplier;
+    modifier isRandomnessReady() {
+        require(witnet.isRandomized(lastBlockSync), "C: Randomness not ready");
+        _;
+    }
+
+    function random(uint256 range) public view returns (uint256) {
+        bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
+
+        return uint256(randomness) % range;
+    }
+
+    function currentEpoch() public view returns (Epoch) {
+      uint256 timeInCycle = block.timestamp % WEEKLY_CYCLE;
+
+      if (!hasStarted) {
+        return Epoch.Init;
+      } else if (timeInCycle < OPEN_EPOCH) {
+        return Epoch.Open;
+      } else if (timeInCycle < OPEN_EPOCH + PENDING_EPOCH) {
+        return Epoch.Pending;
+      } else {
+        return Epoch.Closed;
+      }
+    }
+
+    function roll() isPhase(Epoch.Pending) public {
+      require(!isRolled, "C: Already rolled, must reveal");
+      require(winningTokenId == 0, "C: Winner already chosen");
+    
+      requestRandomness(msg.value);
+
+      isRolled = true;
+
+      emit Roll(totalSupply, reserve);
+    }
+
+    function reveal() isRandomnessReady isPhase(Epoch.Pending) public {
+        require(isRolled, "C: Not rolled, must roll");
+        require(winningTokenId == 0, "C: Winner already chosen");
+
+        uint256 index = random(totalSupply);
+
+        isRolled = false;
+        winningTokenId = index;
+
+        emit Reveal(tokenIds[winningTokenId], entropy);
     }
 
     /*
-        With one mint front-runned, a front-runner will make a loss.
-        With linear price increases of 0.001, it's not profitable.
-        BECAUSE it costs 0.012 ETH at 50 gwei to mint (storage/smart contract costs) + 0.5% loss from creator fee.
-
-        It becomes more profitable to front-run if there are multiple buys that can be spotted
-        from multiple buyers in one block. However, depending on gas price, it depends how profitable it is.
-        Because the planned buffer on the front-end is 0.01 ETH, it's not profitable to front-run any normal amounts.
-        Unless, someone creates a specific contract to start bulk minting.
-        To curb speculation, users can only mint one per transaction (unless you create a separate contract to do this).
-        Thus, ultimately, at this stage, while front-running can be profitable,
-        it is not generally feasible at this small scale.
-
-        Thus, for the sake of usability, there's no additional locks here for front-running protection.
-        A lock would be to have a transaction include the current price:
-        But that means, that only one neolastic per block would be minted (unless you can guess price rises).
+      Front-running is unprofitable with one mint due to 0.012 ETH cost (50 gwei gas + creator fee loss).
+      A 0.001 ETH linear price increase doesn't make it worthwhile. 
+      Front-running becomes profitable with multiple mints from different buyers in a block, but this depends on gas prices. 
+      A 0.01 ETH front-end buffer reduces profitability for normal mints unless using a custom contract for bulk minting. 
+      Users can only mint one per transaction, preventing speculation unless using a separate contract. 
+      While front-running can be profitable, it's not feasible at small scales. 
+      No front-running protection locks are added to avoid limiting usability, as including current prices would restrict mints to one per block.
     */
+
     function mint()
         external
         payable
         virtual
-        NftInitialized
+        isIntialised
+        isRandomnessReady
+        isPhase(Epoch.Open)
         returns (uint256 _tokenId)
     {
-        require(gameState == State.Active, "C: Game ended");
-        require(witnet.isRandomized(lastBlockSync), "C: Randomness not ready");
-
-        // you can only mint one at a time.
-        require(msg.value > 0, "C: No ETH sent");
-
+        if (winningTokenId > 0) winningTokenId = 0;
+        
         uint256 mintPrice = getCurrentPriceToMint();
-        require(msg.value >= mintPrice, "C: Not enough ETH sent");
 
-        nftsCount++;
+        require(msg.value > 0, "C: No ETH sent");
+        require(msg.value >= mintPrice, "C: Not enough ETH sent");
 
         // disburse
         uint256 reserveCut = getReserveCut();
@@ -150,56 +205,58 @@ contract Curve is Ownable {
         require(success, "Unable to send to charity");
 
         uint256 remainder = msg.value.sub(mintPrice); 
-        bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
-        uint256 entropy = uint256(randomness) % (2**256) - 1;
-
-        // Debit remainder msg.value first
-        requestRandomness(remainder);
+        uint256 entropy = random(2 ** 256 - 1);
 
         _tokenId = nft.mint(msg.sender, entropy);
+
+        requestRandomness(remainder);
+
+        tokenIds[nftsCount] = _tokenId;
+        totalSupply = totalSupply + 1;
         
         emit Minted(_tokenId, mintPrice, reserve);
     }
 
-    function burn(uint256 tokenId) payable external virtual NftInitialized {
-        require(witnet.isRandomized(lastBlockSync), "C: Randomness not ready");
+    function burn(uint256 tokenId) payable external 
+        isInitialised 
+        isEpoch(Epoch.Closed) 
+    {
+        require(tokenIds[winningTokenId] == tokenId, "C: Invalid winning token"); 
 
         uint256 burnPrice;
-        bytes32 randomness = witnet.fetchRandomnessAfter(lastBlockSync);
-        uint256 entropy = uint256(randomness) % (2**256) - 1;
 
         if (isRare(tokenId)) {
-          burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
-        } else if (isUkrainianFlag(tokenId)) {
-          burnPrice = getCurrentPriceToBurn().mul(ukrainianFlagPrizeMultiplier);
-        } else {
-          require(reserve > 0, "Reserve should be > 0");
+          burnPrice = reserve;
 
-          string memory lotteryImage = nft.generateSVGofTokenById(entropy);
-          string memory tokenImage = nft.generateSVGofTokenById(tokenId);
-          
-          if (
-              keccak256(abi.encodePacked(lotteryImage)) ==
-              keccak256(abi.encodePacked(tokenImage))
-          ) {
-              burnPrice = reserve;
-              gameState = State.Ended;
-              emit Lottery(tokenId, entropy, true, burnPrice);
-            } 
+          emit Lottery(true, tokenId, burnPrice);
+        } else {
+          if (isUkrainianFlag(tokenId)) {
+            burnPrice = getCurrentPriceToBurn().mul(ukrainianFlagPrizeMultiplier);
+          } else {
+            burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
+          }
+
+          emit Lottery(false, tokenId, burnPrice);
         }
 
-        nft.burn(msg.sender, uint256(tokenId));
-        nftsCount--;
-        
-        emit Lottery(tokenId, uint256(randomness), false, burnPrice);
+        uint256 lastId = tokenIds[totalSupply];
+        uint256 winningId = tokenIds[winningTokenId];
+
+        delete tokenIds[totalSupply];
+        totalSupply = totalSupply - 1;
+
+        tokenIds[winningId] = lastId;
 
         requestRandomness(msg.value);
+        nft.burn(msg.sender, tokenId); 
 
         reserve = reserve.sub(burnPrice);
         
-        (bool success, ) = msg.sender.call{ value: burnPrice }("");
+        if (burnPrice > 0) {
+          (bool success, ) = msg.sender.call{ value: burnPrice }("");
         
-        require(success, "Unable to send burnPrice");
+          require(success, "Unable to send burnPrice");
+        }
 
         emit Burned(tokenId, burnPrice, reserve);
     }
@@ -279,25 +336,41 @@ contract Curve is Ownable {
         return burnPrice;
     }
 
-    function initialise(ERC721 _nft, uint256 oracleFee) external payable onlyOwner {
-        require(address(nft) == address(0), "Already initiated");
-        require(lastBlockSync == 0, "Already synced");
+    function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier) public 
+        isPhase(Epoch.Open)
+        onlyOwner 
+    {
+        require(_flagMultiplier != 0 && _rareMultiplier !=0, "C: Multipliers cannot be zero.");
+        require(2 <= _flagMultiplier && _flagMultiplier <= 8, "C: Flag multiplier must be between 2 and 8");
+        require(5 <= _rareMultiplier && _rareMultiplier <= 40, "C: Rare multiplier must be between 5 and 40");
 
-        requestRandomness(oracleFee);
-
-        gameState = State.Active;
-        nft = _nft;
+        ukrainianFlagPrizeMultiplier = _flagMultiplier;
+        rarePrizeMultiplier = _rareMultiplier;
     }
 
-    function requestRandomness(uint256 value) public payable {
-      require(msg.value >= value, "Insufficient randomness fee");
+    function initialise(ERC721 _nft) external payable 
+        isPhase(Epoch.Init)
+        onlyOwner 
+    {
+        require(lastBlockSync == 0, "C: Already synced");
+        require(address(nft) == address(0), "C: Already initiated");
+
+        requestRandomness(msg.value);
+
+        nft = _nft;
+        hasStarted = true;
+    }
+
+    function requestRandomness(uint256 value) internal payable {
+      require(msg.value >= value, "C: Insufficient randomness fee");
 
       uint256 cost = witnet.randomize{ value: value }();
 
       if (value > cost) {
-        payable(msg.sender).transfer(value - cost);
+        msg.sender.call{ value: value - cost }("");
       }
 
       lastBlockSync = block.number;
     }
+
 }
