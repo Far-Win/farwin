@@ -41,7 +41,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   uint256 public rarePrizeMultiplier;
 
   // this is currently 0.5%
-  uint256 public constant initMintPrice = 0.05 ether; // at 0
+  uint256 public constant initMintPrice = 0.0001 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
   uint256 constant CREATOR_PERCENT = 50;
   uint256 constant CHARITY_PERCENT = 150;
