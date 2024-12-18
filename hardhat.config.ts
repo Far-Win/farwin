@@ -12,7 +12,6 @@ import "hardhat-abi-exporter";
 import "hardhat-tracer";
 import "@nomiclabs/hardhat-etherscan";
 
-
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.19",
@@ -43,6 +42,21 @@ const config: HardhatUserConfig = {
         },
       ],
     },
+    baseSepolia: {
+      url: `https://sepolia.base.org`,
+      chainId: 84532,
+      accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
+    },
+    sepolia: {
+      chainId: 11155111,
+      url: `https://sepolia.infura.io`,
+      accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
+    },
+    base: {
+      url: `https://mainnet.base.org`,
+      chainId: 8453,
+      accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
+    },
     polygonTestnet: {
       url: "https://rpc-mumbai.maticvigil.com",
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
@@ -54,7 +68,7 @@ const config: HardhatUserConfig = {
     polygonMainnet: {
       url: "https://polygon-rpc.com/",
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
-      gasPrice: "auto"
+      gasPrice: "auto",
     },
     bscMainnet: {
       url: "https://bscrpc.com",
@@ -67,7 +81,6 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
   },
-
 };
 
 export default config;
