@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.19;
 
 import "./ERC721.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./gelato/GelatoVRFConsumerBase.sol";
 import "abdk-libraries-solidity/ABDKMathQuad.sol";
+import "./gelato/GelatoVRFConsumerBase.sol";
 
 contract Curve is GelatoVRFConsumerBase, Ownable {
   using SafeMath for uint256;
@@ -15,8 +14,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   // linear bonding curve
   // 99.5% going into reserve.
   // 0.5% going to creator.
-
-  address private immutable operator;
 
   bytes16 internal constant LMIN = 0x40010000000000000000000000000000;
   bytes16 internal constant LMAX = 0x3fff0000000000000000000000000000;
@@ -40,8 +37,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   uint256 public ukrainianFlagPrizeMultiplier;
   uint256 public rarePrizeMultiplier;
 
-  // this is currently 0.5%
-  uint256 public constant initMintPrice = 0.0001 ether; // at 0
+  // this is currently 0.5% of the mint price
+  uint256 public constant initMintPrice = 0.05 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
   uint256 constant CREATOR_PERCENT = 50;
   uint256 constant CHARITY_PERCENT = 150;
@@ -54,10 +51,9 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   address payable public immutable creator;
   address payable public immutable charity;
+  address private immutable operator;
 
   ERC721 public nft;
-
-  address public immutable admin;
 
   event Minted(
     uint256 indexed tokenId,
@@ -79,21 +75,24 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   constructor(
     address payable _creator,
     address payable _charity,
-    address _gelatoOperator // removed Chainlink params with Gelato Operator
+    address _operator
   ) {
-    require(_creator != address(0));
-    require(_charity != address(0));
-    require(_gelatoOperator != address(0));
+    require(_creator != address(0), "Invalid creator address"); // Gelato operator address
+    require(_charity != address(0), "Invalid charity address");
+    require(_operator != address(0), "Invalid operator address");
 
-    creator = _creator;
+    creator = _creator; 
     charity = _charity;
-    operator = _gelatoOperator; // Gelato Operator
-    admin = msg.sender;
+    operator = _operator; // Gelato operator address
   }
 
   modifier NftInitialized() {
     require(address(nft) != address(0), "NFT not initialized");
     _;
+  }
+
+  function _operator() internal view override returns (address) {
+    return operator;
   }
 
   function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier)
@@ -117,11 +116,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     rarePrizeMultiplier = _rareMultiplier;
   }
 
-  function _operator() internal view override returns (address) {
-    return operator;
-  }
-
-  /*
+   /*
         With one mint front-runned, a front-runner will make a loss.
         With linear price increases of 0.001, it's not profitable.
         BECAUSE it costs 0.012 ETH at 50 gwei to mint (storage/smart contract costs) + 0.5% loss from creator fee.
@@ -138,23 +133,17 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
         A lock would be to have a transaction include the current price:
         But that means, that only one neolastic per block would be minted (unless you can guess price rises).
     */
-  function mint()
-    external
-    payable
-    virtual
-    NftInitialized
-    returns (uint256 requestId)
-  {
+
+  function mint() external payable virtual NftInitialized {
     require(!gameEnded, "C: Game ended");
     // you can only mint one at a time.
-
     require(msg.value > 0, "C: No ETH sent");
 
     uint256 mintPrice = getCurrentPriceToMint();
     require(msg.value >= mintPrice, "C: Not enough ETH sent");
 
-    bytes memory extraData = abi.encode(true); // true indicates mint operation
-    requestId = _requestRandomness(extraData);
+    // Store request details before requesting randomness
+    uint256 requestId = _requestRandomness("");
     nftsCount++;
 
     // disburse
@@ -176,19 +165,17 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     }("");
     require(success, "Unable to send to charity");
 
-    uint256 buffer = msg.value.sub(mintPrice); // excess/padding/buffer
+    uint256 buffer = msg.value.sub(mintPrice);  // excess/padding/buffer
     if (buffer > 0) {
       (success, ) = msg.sender.call{ value: buffer }("");
       require(success, "Unable to send buffer back");
     }
-
-    return requestId;
   }
 
   function _fulfillRandomness(
     uint256 randomness,
     uint256 requestId,
-    bytes memory extraData
+    bytes memory /* extraData */
   ) internal override {
     if (requests[requestId].isMint) {
       // mint first to increase supply
@@ -237,13 +224,13 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   }
 
   function burn(uint256 tokenId) external virtual NftInitialized {
-    bytes memory extraData = abi.encode(false); // false indicates burn operation
-    uint256 requestId = _requestRandomness(extraData);
+    uint256 requestId = _requestRandomness("");
 
     requests[requestId]._address = msg.sender;
     requests[requestId]._tokenId = tokenId;
   }
 
+  // Rest of your helper functions remain the same
   function isRare(uint256 tokenId) public pure returns (bool) {
     bytes memory bhash = abi.encodePacked(bytes32(tokenId));
     for (uint256 i = 0; i < 6; i++) {
@@ -329,7 +316,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   function initNFT(ERC721 _nft) external onlyOwner {
     require(address(nft) == address(0), "Already initiated");
-
     nft = _nft;
   }
 }
