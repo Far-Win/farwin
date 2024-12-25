@@ -1,46 +1,65 @@
-const hre = require("hardhat");
+// deploy/01_deploy_curve.ts
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { DeployFunction } from "hardhat-deploy/types";
+import { chainIdToAddresses } from "../networkVariables";
 
-async function main() {
-  const [deployer] = await hre.ethers.getSigners();
-  console.log("Deploying contracts with account:", deployer.address);
+const GELATO_OPERATOR = "0x1F919E17bB2f322bd1ed5Bf822988C37162CF46c";
 
-  // Deploy contracts
-  const ERC721 = await hre.ethers.getContractFactory("ERC721");
-  const Curve = await hre.ethers.getContractFactory("Curve");
+const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
+  const { deployments, getNamedAccounts } = hre;
+  const { deploy, execute } = deployments;
+  const { deployer } = await getNamedAccounts();
 
-  // Deploy Curve first with placeholder addresses
-  const curve = await Curve.deploy(
-    deployer.address, // creator
-    deployer.address, // charity
-    "0x1F919E17bB2f322bd1ed5Bf822988C37162CF46c" // gelato operator
-  );
-  await curve.deployed();
-  console.log("Curve deployed to:", curve.address);
+  // get current chainId
+  const chainId = parseInt(await hre.getChainId());
+  const addresses = chainIdToAddresses[chainId];
 
-  // Deploy ERC721 with curve address
-  const nft = await ERC721.deploy(
-    "Freedom NFT", // name
-    "FREE", // symbol
-    "baseURI/", // baseURI
-    curve.address // curve address
-  );
-  await nft.deployed();
-  console.log("ERC721 deployed to:", nft.address);
+  // Deploy Curve first with Gelato operator
+  const curve = await deploy("Curve", {
+    args: [
+      deployer, // creator (using deployer address)
+      deployer, // charity (using deployer address)
+      GELATO_OPERATOR, // Gelato operator address
+    ],
+    from: deployer,
+    log: true,
+  });
+
+  // Deploy NFT
+  const nft = await deploy("ERC721", {
+    args: ["Freedom", "FREE", "test.com/", curve.address],
+    from: deployer,
+    log: true,
+  });
 
   // Initialize NFT in Curve contract
-  await curve.initNFT(nft.address);
-  console.log("NFT initialized in Curve contract");
+  await execute(
+    "Curve",
+    {
+      from: deployer,
+      log: true,
+    },
+    "initNFT",
+    nft.address
+  );
 
-  // Set prize multipliers
-  await curve.setPrizeMultipliers(2, 5); // flag multiplier: 2, rare multiplier: 5
-  console.log("Prize multipliers set");
+  // Set initial prize multipliers
+  await execute(
+    "Curve",
+    {
+      from: deployer,
+      log: true,
+    },
+    "setPrizeMultipliers",
+    2, // flag multiplier
+    5 // rare multiplier
+  );
 
-  return { curve, nft };
-}
+  console.log("Deployment completed:");
+  console.log("Curve deployed to:", curve.address);
+  console.log("NFT deployed to:", nft.address);
+  console.log("Deployer address:", deployer);
+};
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+export default func;
+func.tags = ["ERC721", "Curve"];
