@@ -2,8 +2,8 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  const CURVE_ADDRESS = "0x10536eB5519cf6991D84d43B443f9ca2E916073b";
-  const NFT_ADDRESS = "0xD50D6Dc2E7764D53E021BFd905a0823B7C7c6E83";
+  const CURVE_ADDRESS = "0x13D59843A4e44BE25d1F1471FA6FFadBEe5EcE28";
+  const NFT_ADDRESS = "0x2254e1406C26727eAdE8A4e92C035721467B6554";
 
   async function getBalanceChange(address, action) {
     const balanceBefore = await ethers.provider.getBalance(address);

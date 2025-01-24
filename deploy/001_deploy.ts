@@ -1,7 +1,8 @@
-// deploy/01_deploy_curve.ts
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { chainIdToAddresses } from "../networkVariables";
+import { AutomateSDK, TriggerType } from "@gelatonetwork/automate-sdk";
+import { ethers } from "hardhat";
 
 const GELATO_OPERATOR = "0x1F919E17bB2f322bd1ed5Bf822988C37162CF46c";
 
@@ -9,30 +10,26 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments, getNamedAccounts } = hre;
   const { deploy, execute } = deployments;
   const { deployer } = await getNamedAccounts();
-
-  // get current chainId
   const chainId = parseInt(await hre.getChainId());
   const addresses = chainIdToAddresses[chainId];
+  const [deployer1] = await ethers.getSigners();
+  //@ts-ignore
+  const automate = new AutomateSDK(chainId, deployer1);
 
-  // Deploy Curve first with Gelato operator
   const curve = await deploy("Curve", {
-    args: [
-      deployer, // creator (using deployer address)
-      deployer, // charity (using deployer address)
-      GELATO_OPERATOR, // Gelato operator address
-    ],
+    skipIfAlreadyDeployed: false,
+    args: [deployer, deployer, GELATO_OPERATOR],
     from: deployer,
     log: true,
   });
 
-  // Deploy NFT
   const nft = await deploy("ERC721", {
+    skipIfAlreadyDeployed: false,
     args: ["Freedom", "FREE", "test.com/", curve.address],
     from: deployer,
     log: true,
   });
 
-  // Initialize NFT in Curve contract
   await execute(
     "Curve",
     {
@@ -43,7 +40,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     nft.address
   );
 
-  // Set initial prize multipliers
   await execute(
     "Curve",
     {
@@ -51,8 +47,34 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       log: true,
     },
     "setPrizeMultipliers",
-    2, // flag multiplier
-    5 // rare multiplier
+    2,
+    5
+  );
+
+  // Create Gelato Automate task for VRF
+  const curveContract = await hre.ethers.getContract("Curve");
+
+  console.log("Creating VRF automate task...");
+  const { taskId, tx } = await automate.createBatchExecTask({
+    name: "Curve VRF",
+    web3FunctionHash: "QmWm8Uq2UYRAVwFyzWop2Hghj56WhJk7K8hGGC2Jy7rzDo", // Replace with your Web3 Function hash
+    web3FunctionArgs: { consumerAddress: curve.address },
+    trigger: {
+      type: TriggerType.EVENT,
+      filter: {
+        topics: [
+          [curveContract.interface.getEventTopic("RequestedRandomness")],
+        ],
+        address: curve.address,
+      },
+      blockConfirmations: chainId === 1 ? 1 : 0,
+    },
+  });
+
+  await tx.wait();
+  console.log(`Task created, taskId: ${taskId} (tx hash: ${tx.hash})`);
+  console.log(
+    `> https://vrf.app.gelato.network/task/${taskId}?chainId=${chainId}`
   );
 
   console.log("Deployment completed:");
