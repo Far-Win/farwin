@@ -1,143 +1,172 @@
-// scripts/test-full-functionality.js
+// scripts/find-white-square.js
 const { ethers } = require("hardhat");
 
 async function main() {
-  const CURVE_ADDRESS = "0x13D59843A4e44BE25d1F1471FA6FFadBEe5EcE28";
-  const NFT_ADDRESS = "0x2254e1406C26727eAdE8A4e92C035721467B6554";
-
-  async function getBalanceChange(address, action) {
-    const balanceBefore = await ethers.provider.getBalance(address);
-    await action();
-    const balanceAfter = await ethers.provider.getBalance(address);
-    return balanceAfter.sub(balanceBefore);
-  }
+  const CURVE_ADDRESS = "0x07CB1cbbcCb8E781D0F439196ea2E7e618B57f64";
+  const NFT_ADDRESS = "0x081Baed784b6b4976E41E18d3110874cE26a22E0";
 
   try {
     const [signer] = await ethers.getSigners();
     const curve = await ethers.getContractAt("Curve", CURVE_ADDRESS);
     const nft = await ethers.getContractAt("ERC721", NFT_ADDRESS);
 
-    console.log("\n1. First let's mint an NFT to test with:");
-    const mintPrice = await curve.getCurrentPriceToMint();
-    console.log("Mint price:", ethers.utils.formatEther(mintPrice), "ETH");
-
-    const tx = await curve.mint({
-      value: mintPrice,
-      gasLimit: 500000,
-    });
-
-    console.log("Mint transaction:", tx.hash);
-    const receipt = await tx.wait();
-    console.log("Minted successfully!");
-
-    // Wait for Gelato to fulfill randomness
-    console.log("\nWaiting for Gelato to fulfill randomness...");
     console.log(
-      "Please wait for the randomness to be fulfilled before continuing."
+      "Starting the hunt for an NFT with a white square in the middle (rare NFT)..."
     );
-    console.log(
-      "Press Enter when the NFT has been minted (check your wallet)..."
-    );
-    await new Promise((resolve) =>
-      require("readline").createInterface(process.stdin).question("", resolve)
-    );
+    console.log("Your address:", signer.address);
 
-    // Get NFT ID
+    let foundRareNFT = false;
+    let mintCount = 0;
+    let rareTokenId = null;
+
+    // First, check existing NFTs
     const balance = await nft.balanceOf(signer.address);
-    console.log("\nYour NFT balance:", balance.toString());
+    console.log("\nYour current NFT balance:", balance.toString());
 
-    let tokenId;
-    for (let i = 0; i < balance; i++) {
-      tokenId = await nft.tokenOfOwnerByIndex(signer.address, i);
-      console.log(`Token ID ${i}:`, tokenId.toString());
+    if (balance.gt(0)) {
+      console.log("Checking your existing NFTs first...");
+
+      for (let i = 0; i < balance; i++) {
+        const tokenId = await nft.tokenOfOwnerByIndex(signer.address, i);
+        console.log(`Checking token ID ${tokenId.toString()}...`);
+
+        try {
+          const isRare = await curve.isRare(tokenId);
+
+          if (isRare) {
+            console.log(
+              `✅ Token ID ${tokenId.toString()} has a white square in the middle!`
+            );
+            foundRareNFT = true;
+            rareTokenId = tokenId;
+
+            // Get SVG to visualize the NFT
+            try {
+              const svg = await nft.generateSVGofTokenById(tokenId);
+              console.log("\nNFT Visualization:");
+              console.log(svg);
+            } catch (error) {
+              console.log("Couldn't get SVG visualization");
+            }
+
+            break;
+          }
+        } catch (error) {
+          console.log("Error checking if NFT is rare:", error.message);
+        }
+      }
     }
 
-    if (!tokenId) {
+    // If we didn't find one, start minting
+    while (!foundRareNFT) {
+      mintCount++;
+      console.log(`\n💰 Minting NFT #${mintCount}...`);
+
+      const mintPrice = await curve.getCurrentPriceToMint();
+      console.log("Mint price:", ethers.utils.formatEther(mintPrice), "ETH");
+
+      // Add a bit extra to cover price increases during transaction
+      const mintValue = mintPrice.mul(110).div(100); // Add 10%
+
+      const tx = await curve.mint({
+        value: mintValue,
+        gasLimit: 500000,
+      });
+
+      console.log("Mint transaction:", tx.hash);
+      await tx.wait();
+      console.log("Minted successfully!");
+
+      // Wait for Gelato to fulfill randomness
+      console.log("\nWaiting for Gelato to fulfill randomness...");
       console.log(
-        "No NFT found. Make sure minting was successful before continuing."
+        "Press Enter when the NFT has been minted (check your wallet)..."
       );
-      return;
+      await new Promise((resolve) =>
+        require("readline").createInterface(process.stdin).question("", resolve)
+      );
+
+      // Get the latest token
+      const newBalance = await nft.balanceOf(signer.address);
+      if (newBalance.gt(balance.add(mintCount - 1))) {
+        const tokenId = await nft.tokenOfOwnerByIndex(
+          signer.address,
+          newBalance.sub(1)
+        );
+        console.log(`Latest Token ID:`, tokenId.toString());
+
+        // Check if this token has a white square in the middle
+        try {
+          const isRare = await curve.isRare(tokenId);
+
+          if (isRare) {
+            console.log(
+              `✅ Success! Token ID ${tokenId.toString()} has a white square in the middle!`
+            );
+            foundRareNFT = true;
+            rareTokenId = tokenId;
+
+            // Get SVG to visualize the NFT
+            try {
+              const svg = await nft.generateSVGofTokenById(tokenId);
+              console.log("\nNFT Visualization:");
+              console.log(svg);
+            } catch (error) {
+              console.log("Couldn't get SVG visualization");
+            }
+
+            break;
+          } else {
+            console.log(
+              "This NFT doesn't have a white square in the middle. Continuing..."
+            );
+          }
+        } catch (error) {
+          console.error("Error checking if NFT is rare:", error.message);
+          console.log("Continuing to mint...");
+        }
+      } else {
+        console.log("Minting appears to have failed. Try again.");
+        mintCount--;
+      }
     }
 
-    // Test different burn scenarios
-    console.log("\n2. Testing burn functionality:");
-    console.log("TokenId:", tokenId.toString());
+    if (foundRareNFT) {
+      console.log(
+        "\n🎉 Success! Found an NFT with a white square in the middle!"
+      );
+      console.log("Token ID:", rareTokenId.toString());
+      console.log("\nNow hold onto this NFT - don't burn it yet!");
 
-    // Check if it's a Ukrainian flag
-    const isUkrFlag = await curve.isUkrainianFlag(tokenId);
-    console.log("Is Ukrainian Flag:", isUkrFlag);
+      // Check your total balance
+      const finalBalance = await nft.balanceOf(signer.address);
+      console.log(`\nYou now have ${finalBalance.toString()} NFTs`);
 
-    // Check if it's rare
-    const isRare = await curve.isRare(tokenId);
-    console.log("Is Rare:", isRare);
+      // Display the rare prize multiplier
+      try {
+        const multiplier = await curve.rarePrizeMultiplier();
+        console.log(
+          `\nThe prize multiplier for white square in the middle is: ${multiplier.toString()}x`
+        );
 
-    // Get current balance before burn
-    const balanceBefore = await ethers.provider.getBalance(signer.address);
-    console.log(
-      "\nBalance before burn:",
-      ethers.utils.formatEther(balanceBefore),
-      "ETH"
-    );
-
-    // Burn the NFT
-    console.log("\nBurning NFT...");
-    const burnTx = await curve.burn(tokenId, {
-      gasLimit: 500000,
-    });
-
-    console.log("Burn transaction:", burnTx.hash);
-    const burnReceipt = await burnTx.wait();
-
-    // Wait for Gelato to fulfill randomness again
-    console.log("\nWaiting for Gelato to fulfill randomness...");
-    console.log("Please wait a moment and check your wallet for any prize...");
-    console.log("Press Enter after the burn transaction is complete...");
-    await new Promise((resolve) =>
-      require("readline").createInterface(process.stdin).question("", resolve)
-    );
-
-    // Check final balance
-    const balanceAfter = await ethers.provider.getBalance(signer.address);
-    console.log(
-      "\nBalance after burn:",
-      ethers.utils.formatEther(balanceAfter),
-      "ETH"
-    );
-
-    // Calculate rough balance change (not accounting for gas)
-    const balanceChange = balanceAfter.sub(balanceBefore);
-    console.log(
-      "Balance change:",
-      ethers.utils.formatEther(balanceChange),
-      "ETH"
-    );
-
-    // Check if game ended (lottery win)
-    const gameEnded = await curve.gameEnded();
-    console.log("\nGame ended (lottery win):", gameEnded);
-
-    // Final NFT balance
-    const finalNftBalance = await nft.balanceOf(signer.address);
-    console.log("Final NFT balance:", finalNftBalance.toString());
-
-    console.log("\nResults Summary:");
-    console.log(
-      "- NFT was",
-      finalNftBalance.eq(0) ? "successfully burned" : "not burned"
-    );
-    console.log(
-      "- Prize received:",
-      ethers.utils.formatEther(balanceChange),
-      "ETH"
-    );
-    if (isUkrFlag) {
-      console.log("- Was Ukrainian Flag NFT");
-    }
-    if (isRare) {
-      console.log("- Was Rare NFT");
-    }
-    if (gameEnded) {
-      console.log("- Won the lottery!");
+        const currentBurnPrice = await curve.getCurrentPriceToBurn();
+        console.log(
+          `Current burn price: ${ethers.utils.formatEther(
+            currentBurnPrice
+          )} ETH`
+        );
+        console.log(
+          `Potential prize if burned: ${ethers.utils.formatEther(
+            currentBurnPrice.mul(multiplier)
+          )} ETH`
+        );
+      } catch (error) {
+        console.log("Couldn't fetch prize multiplier");
+      }
+    } else {
+      console.log(
+        "No NFT with a white square in the middle was found after extensive minting."
+      );
     }
   } catch (error) {
     console.error("Error:", error);
