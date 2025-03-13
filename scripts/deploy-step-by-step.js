@@ -13,7 +13,7 @@ async function main() {
     const curve = await Curve.deploy(
       deployer.address, // creator
       deployer.address, // charity
-      "0xCC40D88E2E4c63d4039FB2E39De9C3654d8465cB" // gelato operator
+      "0x1F919E17bB2f322bd1ed5Bf822988C37162CF46c" // gelato operator
     );
     await curve.deployed();
     console.log("Curve deployed to:", curve.address);
@@ -31,11 +31,14 @@ async function main() {
     const nft = await ERC721.deploy(
       "Freedom NFT", // name
       "FREE", // symbol
-      "baseURI/", // baseURI
       curve.address // curve address
     );
     await nft.deployed();
     console.log("ERC721 deployed to:", nft.address);
+
+    const baseURI = `https://crypty-frame.vercel.app/api/token/${nft.address}/`;
+    await nft.setBaseURI(baseURI);
+    console.log("BaseURI set to:", baseURI);
 
     // Verify NFT deployment
     const nftCode = await ethers.provider.getCode(nft.address);
