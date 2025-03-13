@@ -71,10 +71,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     bool isWinner,
     uint256 indexed prizeAmount
   );
-  event MintRequested(
-    address indexed requester,
-    uint256 indexed requestId
-  );
+  event MintRequested(address indexed requester, uint256 indexed requestId);
 
   constructor(
     address payable _creator,
@@ -85,7 +82,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     require(_charity != address(0), "Invalid charity address");
     require(_operator != address(0), "Invalid operator address");
 
-    creator = _creator; 
+    creator = _creator;
     charity = _charity;
     operator = _operator; // Gelato operator address
   }
@@ -99,28 +96,28 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     return operator;
   }
 
-  function setPrizeMultipliers(uint256 _flagMultiplier, uint256 _rareMultiplier)
-    public
-    onlyOwner
-  {
+  function setPrizeMultipliers(
+    uint256 _fourSquaresMultiplier,
+    uint256 _rareMultiplier
+  ) public onlyOwner {
     require(
-      _flagMultiplier != 0 && _rareMultiplier != 0,
+      _fourSquaresMultiplier != 0 && _rareMultiplier != 0,
       "Curve: Multipliers cannot be zero."
     );
     require(
-      2 <= _flagMultiplier && _flagMultiplier <= 8,
-      "Curve: Flag multiplier must be between 2 and 8"
+      2 <= _fourSquaresMultiplier && _fourSquaresMultiplier <= 8,
+      "Curve: Four squares multiplier must be between 2 and 8"
     );
     require(
       5 <= _rareMultiplier && _rareMultiplier <= 40,
       "Curve: Rare multiplier must be between 5 and 40"
     );
 
-    ukrainianFlagPrizeMultiplier = _flagMultiplier;
+    ukrainianFlagPrizeMultiplier = _fourSquaresMultiplier;
     rarePrizeMultiplier = _rareMultiplier;
   }
 
-   /*
+  /*
         With one mint front-runned, a front-runner will make a loss.
         With linear price increases of 0.001, it's not profitable.
         BECAUSE it costs 0.012 ETH at 50 gwei to mint (storage/smart contract costs) + 0.5% loss from creator fee.
@@ -170,7 +167,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     }("");
     require(success, "Unable to send to charity");
 
-    uint256 buffer = msg.value.sub(mintPrice);  // excess/padding/buffer
+    uint256 buffer = msg.value.sub(mintPrice); // excess/padding/buffer
     if (buffer > 0) {
       (success, ) = msg.sender.call{ value: buffer }("");
       require(success, "Unable to send buffer back");
@@ -196,9 +193,11 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
       uint256 tokenId = requests[requestId]._tokenId;
 
       if (isRare(tokenId)) {
+        // White square in the middle wins the rare prize multiplier
         burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
-      } else if (isUkrainianFlag(tokenId)) {
-        burnPrice = getCurrentPriceToBurn().mul(ukrainianFlagPrizeMultiplier);
+      } else if (hasFourSameSquares(tokenId)) {
+        // 4 squares of the same color wins 2x the mint price
+        burnPrice = getCurrentPriceToBurn().mul(2);
       } else {
         require(reserve > 0, "Reserve should be > 0");
 
@@ -236,28 +235,16 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   }
 
   // Rest of your helper functions remain the same
-  function isRare(uint256 tokenId) public pure returns (bool) {
-    bytes memory bhash = abi.encodePacked(bytes32(tokenId));
-    for (uint256 i = 0; i < 6; i++) {
-      if (toUint8(bhash, i) / 51 == 5) {
-        return true;
-      }
-    }
-    return false;
-  }
+  function isRare(uint256 tokenId) public view returns (bool) {
+    // Get the SVG representation of the token to check if white is in the middle
+    string memory svgImage = nft.generateSVGofTokenById(tokenId);
 
-  function isUkrainianFlag(uint256 tokenId) public pure returns (bool) {
+    // Check if the middle square (index 4) is white
     bytes memory bhash = abi.encodePacked(bytes32(tokenId));
 
-    if (toUint8(bhash, 0) / 51 == 1 && toUint8(bhash, 1) / 51 == 3) {
-      return true;
-    } else if (toUint8(bhash, 2) / 51 == 1 && toUint8(bhash, 3) / 51 == 3) {
-      return true;
-    } else if (toUint8(bhash, 4) / 51 == 1 && toUint8(bhash, 5) / 51 == 3) {
-      return true;
-    }
-
-    return false;
+    // The white color is at index 5 in the palette (palette[5])
+    // Each color is determined by dividing the byte value by 51
+    return toUint8(bhash, 4) / 51 == 5; // Check if middle square is white
   }
 
   // helper function for generation
@@ -276,6 +263,28 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     }
 
     return tempUint;
+  }
+
+  function hasFourSameSquares(uint256 tokenId) public pure returns (bool) {
+    bytes memory bhash = abi.encodePacked(bytes32(tokenId));
+
+    // Count occurrences of each color (0-5 in the palette)
+    uint8[6] memory colorCounts;
+
+    for (uint256 i = 0; i < 9; i++) {
+      uint8 colorIndex = toUint8(bhash, i) / 51;
+      if (colorIndex < 6) {
+        // Make sure it's within our palette range
+        colorCounts[colorIndex]++;
+
+        // If we found 4 of any color, return true
+        if (colorCounts[colorIndex] >= 4) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   // if supply 0, mint price = 0.002
