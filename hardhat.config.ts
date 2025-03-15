@@ -32,15 +32,16 @@ const config: HardhatUserConfig = {
       accounts: [process.env.DEPLOYER_PRIVATE_KEY!],
     },
     hardhat: {
-      // forking: {
-      //   url: "https://matic-mainnet-full-rpc.bwarelabs.com",
-      // },
-      accounts: [
-        {
-          privateKey: process.env.DEPLOYER_PRIVATE_KEY!,
-          balance: parseEther("100").toString(),
-        },
-      ],
+      mining: {
+        auto: true,
+        interval: 1000, // Optional: Add a delay between blocks for testing timing
+      },
+      accounts: {
+        count: 10, // Number of accounts to generate
+        mnemonic: "test test test test test test test test test test test junk", // Predictable accounts for testing
+        path: "m/44'/60'/0'/0",
+        accountsBalance: "10000000000000000000000", // 10000 ETH
+      },
     },
     baseSepolia: {
       url: `https://sepolia.base.org`,
