@@ -75,10 +75,10 @@ async function main() {
     console.log("NFT Name:", nftName);
     console.log("NFT Symbol:", nftSymbol);
 
-    const flagMultiplier = await curve.ukrainianFlagPrizeMultiplier();
-    const rareMultiplier = await curve.rarePrizeMultiplier();
-    console.log("Flag Multiplier:", flagMultiplier.toString());
-    console.log("Rare Multiplier:", rareMultiplier.toString());
+    // const flagMultiplier = await curve.ukrainianFlagPrizeMultiplier();
+    // const rareMultiplier = await curve.rarePrizeMultiplier();
+    // console.log("Flag Multiplier:", flagMultiplier.toString());
+    // console.log("Rare Multiplier:", rareMultiplier.toString());
 
     console.log("\nDeployment completed successfully! ✓");
 

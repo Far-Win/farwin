@@ -32,13 +32,12 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   mapping(uint256 => Request) public requests;
   uint256 public nftsCount;
-  bool public gameEnded;
 
-  uint256 public ukrainianFlagPrizeMultiplier;
+  uint256 public fourSquaresMultiplier;
   uint256 public rarePrizeMultiplier;
 
   // this is currently 0.5% of the mint price
-  uint256 public constant initMintPrice = 0.000001 ether; // at 0
+  uint256 public constant initMintPrice = 0.00025 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
   uint256 constant CREATOR_PERCENT = 50;
   uint256 constant CHARITY_PERCENT = 150;
@@ -113,7 +112,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
       "Curve: Rare multiplier must be between 5 and 40"
     );
 
-    ukrainianFlagPrizeMultiplier = _fourSquaresMultiplier;
+    fourSquaresMultiplier = _fourSquaresMultiplier;
     rarePrizeMultiplier = _rareMultiplier;
   }
 
@@ -136,7 +135,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     */
 
   function mint() external payable virtual NftInitialized {
-    require(!gameEnded, "C: Game ended");
+    // require(!gameEnded, "C: Game ended");
     // you can only mint one at a time.
     require(msg.value > 0, "C: No ETH sent");
 
@@ -193,29 +192,25 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
       uint256 tokenId = requests[requestId]._tokenId;
 
       if (isRare(tokenId)) {
-        // White square in the middle wins the rare prize multiplier
-        burnPrice = getCurrentPriceToBurn().mul(rarePrizeMultiplier);
+        // White square in the middle wins the entire reserve and resets the game
+        burnPrice = reserve;
+        nftsCount = 0; // Reset NFT count to 0
+        emit Lottery(tokenId, randomness, true, burnPrice);
       } else if (hasFourSameSquares(tokenId)) {
-        // 4 squares of the same color wins 2x the mint price
-        burnPrice = getCurrentPriceToBurn().mul(2);
+        // 4 squares of the same color wins the fourSquaresMultiplier
+        burnPrice = getCurrentPriceToBurn().mul(fourSquaresMultiplier);
+        nftsCount--; // Only decrement for non-rare NFTs
       } else {
-        require(reserve > 0, "Reserve should be > 0");
-
-        string memory lotteryImage = nft.generateSVGofTokenById(randomness);
-        string memory tokenImage = nft.generateSVGofTokenById(tokenId);
-        if (
-          keccak256(abi.encodePacked(lotteryImage)) ==
-          keccak256(abi.encodePacked(tokenImage))
-        ) {
-          burnPrice = reserve;
-          gameEnded = true;
-          emit Lottery(tokenId, randomness, true, burnPrice);
-        }
+        // Regular burn - just return the burn price
+        burnPrice = getCurrentPriceToBurn();
+        nftsCount--; // Only decrement for non-rare NFTs
       }
 
       nft.burn(requests[requestId]._address, tokenId);
-      nftsCount--;
-      emit Lottery(tokenId, randomness, false, burnPrice);
+
+      if (!isRare(tokenId)) {
+        emit Lottery(tokenId, randomness, false, burnPrice);
+      }
 
       reserve = reserve.sub(burnPrice);
       (bool success, ) = requests[requestId]._address.call{ value: burnPrice }(
@@ -228,6 +223,12 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   }
 
   function burn(uint256 tokenId) external virtual NftInitialized {
+    if (hasFourSameSquares(tokenId)) {
+      require(
+        nftsCount > 1,
+        "Cannot burn four squares when only 1 NFT remains"
+      );
+    }
     uint256 requestId = _requestRandomness("");
 
     requests[requestId]._address = msg.sender;
@@ -317,6 +318,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   // helper function for legibility
   function getReserveCut() public view virtual returns (uint256) {
     return getCurrentPriceToBurn();
+  }
+
+  function getNftCount() public view virtual returns (uint256) {
+    return nftsCount;
   }
 
   // if supply 1, then burn price = 0.000995
