@@ -15,10 +15,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   // 99.5% going into reserve.
   // 0.5% going to creator.
 
-  bytes16 internal constant LMIN = 0x40010000000000000000000000000000;
-  bytes16 internal constant LMAX = 0x3fff0000000000000000000000000000;
-  bytes16 internal constant T = 0x401124f8000000000000000000000000;
-  bytes16 internal constant b = 0x3ffb2a5cd80b02065168267ecaae600a;
+  bytes16 internal LMIN;
+  bytes16 internal LMAX;
+  bytes16 internal T;
+  bytes16 internal b;
   bytes16 internal constant ONE_TOKEN_BYTES =
     0x403abc16d674ec800000000000000000;
 
@@ -33,11 +33,12 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   mapping(uint256 => Request) public requests;
   uint256 public nftsCount;
 
-  uint256 public fourSquaresMultiplier;
-  uint256 public rarePrizeMultiplier;
+  // uint256 public fourSquaresMultiplier;
+  // uint256 public rarePrizeMultiplier;
+  uint256 public whiteSquareCount;
 
   // this is currently 0.5% of the mint price
-  uint256 public constant initMintPrice = 0.00025 ether; // at 0
+  uint256 public constant initMintPrice = 0.0005 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
   uint256 constant CREATOR_PERCENT = 50;
   uint256 constant CHARITY_PERCENT = 150;
@@ -51,6 +52,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   address payable public immutable creator;
   address payable public immutable charity;
   address private immutable operator;
+
+  function convert(uint256 value) public pure returns (bytes16) {
+    return ABDKMathQuad.fromUInt(value);
+  }
 
   ERC721 public nft;
 
@@ -84,6 +89,11 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     creator = _creator;
     charity = _charity;
     operator = _operator; // Gelato operator address
+
+    LMIN = ABDKMathQuad.fromUInt(150); // Price approaches 0.15 ETH ($150)
+    LMAX = ABDKMathQuad.fromUInt(1); // First mint is 0.001 ETH ($1)
+    T = ABDKMathQuad.fromUInt(50); // Controls curve shape
+    b = ABDKMathQuad.fromUInt(100);
   }
 
   modifier NftInitialized() {
@@ -95,26 +105,26 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     return operator;
   }
 
-  function setPrizeMultipliers(
-    uint256 _fourSquaresMultiplier,
-    uint256 _rareMultiplier
-  ) public onlyOwner {
-    require(
-      _fourSquaresMultiplier != 0 && _rareMultiplier != 0,
-      "Curve: Multipliers cannot be zero."
-    );
-    require(
-      2 <= _fourSquaresMultiplier && _fourSquaresMultiplier <= 8,
-      "Curve: Four squares multiplier must be between 2 and 8"
-    );
-    require(
-      5 <= _rareMultiplier && _rareMultiplier <= 40,
-      "Curve: Rare multiplier must be between 5 and 40"
-    );
+  // function setPrizeMultipliers(
+  //   uint256 _fourSquaresMultiplier,
+  //   uint256 _rareMultiplier
+  // ) public onlyOwner {
+  //   require(
+  //     _fourSquaresMultiplier != 0 && _rareMultiplier != 0,
+  //     "Curve: Multipliers cannot be zero."
+  //   );
+  //   require(
+  //     2 <= _fourSquaresMultiplier && _fourSquaresMultiplier <= 8,
+  //     "Curve: Four squares multiplier must be between 2 and 8"
+  //   );
+  //   require(
+  //     5 <= _rareMultiplier && _rareMultiplier <= 40,
+  //     "Curve: Rare multiplier must be between 5 and 40"
+  //   );
 
-    fourSquaresMultiplier = _fourSquaresMultiplier;
-    rarePrizeMultiplier = _rareMultiplier;
-  }
+  //   fourSquaresMultiplier = _fourSquaresMultiplier;
+  //   rarePrizeMultiplier = _rareMultiplier;
+  // }
 
   /*
         With one mint front-runned, a front-runner will make a loss.
@@ -147,8 +157,12 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     emit MintRequested(msg.sender, requestId);
     nftsCount++;
 
-    // disburse
-    uint256 reserveCut = getReserveCut();
+    // Calculate exact amounts for each recipient
+    uint256 creatorAmount = mintPrice.mul(CREATOR_PERCENT).div(DENOMINATOR);
+    uint256 charityAmount = mintPrice.mul(CHARITY_PERCENT).div(DENOMINATOR);
+
+    // Calculate reserve amount (ensures accurate accounting)
+    uint256 reserveCut = mintPrice.sub(creatorAmount).sub(charityAmount);
     reserve = reserve.add(reserveCut);
 
     requests[requestId].isMint = true;
@@ -157,13 +171,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     requests[requestId]._reserve = reserve;
 
     bool success;
-    (success, ) = creator.call{
-      value: mintPrice.mul(CREATOR_PERCENT).div(DENOMINATOR)
-    }("");
+    (success, ) = creator.call{ value: creatorAmount }("");
     require(success, "Unable to send to creator");
-    (success, ) = charity.call{
-      value: mintPrice.mul(CHARITY_PERCENT).div(DENOMINATOR)
-    }("");
+
+    (success, ) = charity.call{ value: charityAmount }("");
     require(success, "Unable to send to charity");
 
     uint256 buffer = msg.value.sub(mintPrice); // excess/padding/buffer
@@ -193,16 +204,18 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
       if (isRare(tokenId)) {
         // White square in the middle wins the entire reserve and resets the game
-        burnPrice = reserve;
+        burnPrice = reserve; // Reset the reserve to 0 since we're paying everything out
         nftsCount = 0; // Reset NFT count to 0
+        whiteSquareCount++;
+
         emit Lottery(tokenId, randomness, true, burnPrice);
       } else if (hasFourSameSquares(tokenId)) {
         // 4 squares of the same color wins the fourSquaresMultiplier
-        burnPrice = getCurrentPriceToBurn().mul(fourSquaresMultiplier);
+        burnPrice = getCurrentPriceToMint().mul(2);
         nftsCount--; // Only decrement for non-rare NFTs
       } else {
         // Regular burn - just return the burn price
-        burnPrice = getCurrentPriceToBurn();
+        burnPrice = 0;
         nftsCount--; // Only decrement for non-rare NFTs
       }
 
@@ -245,7 +258,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
     // The white color is at index 5 in the palette (palette[5])
     // Each color is determined by dividing the byte value by 51
-    return toUint8(bhash, 4) / 51 == 5; // Check if middle square is white
+    return toUint8(bhash, 4) / 51 == 4; // Check if middle square is white
   }
 
   // helper function for generation
@@ -322,6 +335,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   function getNftCount() public view virtual returns (uint256) {
     return nftsCount;
+  }
+
+  function getWhiteSquareCount() public view virtual returns (uint256) {
+    return whiteSquareCount;
   }
 
   // if supply 1, then burn price = 0.000995

@@ -7,8 +7,8 @@ async function main() {
   // const NFT_ADDRESS = "0x6324ec1fc17fCA9Ea5998e48F055f1f9d75AcaCC";
 
   // Update these addresses with your deployed contracts
-  const CURVE_ADDRESS = "0x1a6686D616435f534F884304BCd5fd2964B7baaA";
-  const NFT_ADDRESS = "0x8D4208A23Fe5677D93A954C196b5470d56E4bE3C";
+  const CURVE_ADDRESS = "0x0038251665CEe91bec97eb2AE6a1C2a0ab1f3B42";
+  const NFT_ADDRESS = "0x5d319f0d557F0c6C890407661b7D23Ebb8574199";
 
   try {
     const [signer] = await ethers.getSigners();
@@ -22,11 +22,14 @@ async function main() {
 
     // Check contract data
     const nftCount = await curve.getNftCount();
+    const whiteSquareCount = await curve.whiteSquareCount();
+
     const reserve = await curve.reserve();
     const contractBalance = await ethers.provider.getBalance(CURVE_ADDRESS);
 
     console.log("\nContract Status:");
     console.log(`- NFT Count: ${nftCount.toString()}`);
+    console.log(`- White Square Count: ${whiteSquareCount.toString()}`);
     console.log(`- Reserve: ${ethers.utils.formatEther(reserve)} ETH`);
     console.log(
       `- Contract Balance: ${ethers.utils.formatEther(contractBalance)} ETH`
@@ -66,16 +69,19 @@ async function main() {
 
       // Get reward info for each type
       const burnPrice = await curve.getCurrentPriceToBurn();
-      const fourSquaresMultiplier = await curve.fourSquaresMultiplier();
+      const mintPrice = await curve.getCurrentPriceToMint();
 
       console.log("\nReward Information:");
+      console.log(`- Regular NFT Reward: ${ethers.utils.formatEther(0)} ETH`);
       console.log(
-        `- Regular NFT Reward: ${ethers.utils.formatEther(burnPrice)} ETH`
+        `- Mint Price: ${ethers.utils.formatEther(
+          mintPrice
+        )} ETH (2× mint price)`
       );
       console.log(
-        `- Four Squares Multiplier: ${fourSquaresMultiplier}x (${ethers.utils.formatEther(
-          burnPrice.mul(fourSquaresMultiplier)
-        )} ETH)`
+        `- Four Squares Reward: ${ethers.utils.formatEther(
+          mintPrice.mul(2)
+        )} ETH (2× mint price)`
       );
       console.log(
         `- White Square Reward: ${ethers.utils.formatEther(
@@ -119,7 +125,7 @@ async function main() {
       console.log("Mint transaction confirmed!");
 
       console.log("\nWaiting for Gelato to fulfill randomness (15 seconds)...");
-      let countdown = 2;
+      let countdown = 15;
       const timer = setInterval(() => {
         process.stdout.write(`${countdown}... `);
         countdown--;
@@ -168,8 +174,7 @@ async function main() {
       // Check what type of NFT it is
       const isRare = await curve.isRare(tokenId);
       const hasFourSquares = await curve.hasFourSameSquares(tokenId);
-      const burnPrice = await curve.getCurrentPriceToBurn();
-      const fourSquaresMultiplier = await curve.fourSquaresMultiplier();
+      const mintPrice = await curve.getCurrentPriceToMint();
 
       let expectedReward;
       if (isRare) {
@@ -177,10 +182,10 @@ async function main() {
         expectedReward = reserve;
       } else if (hasFourSquares) {
         console.log("This is a FOUR SAME-COLORED SQUARES NFT!");
-        expectedReward = burnPrice.mul(fourSquaresMultiplier);
+        expectedReward = mintPrice.mul(2); // 2× the mint price
       } else {
         console.log("This is a REGULAR NFT");
-        expectedReward = burnPrice;
+        expectedReward = ethers.BigNumber.from(0); // Regular NFTs get 0
       }
 
       console.log(
@@ -266,7 +271,12 @@ async function main() {
 
       // Check NFT count after burn
       const nftCountAfter = await curve.getNftCount();
+      const whiteSquareCountAfter = await curve.whiteSquareCount();
+
       console.log(`\nNFT Count After: ${nftCountAfter.toString()}`);
+      console.log(
+        `White Square Count After: ${whiteSquareCountAfter.toString()}`
+      );
 
       if (isRare && nftCountAfter.eq(0)) {
         console.log("\n🎊 GAME RESET! 🎊");
