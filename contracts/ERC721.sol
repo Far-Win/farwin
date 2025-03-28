@@ -124,7 +124,12 @@ contract ERC721 is
   constructor(
     string memory name_,
     string memory symbol_,
-    address _curve
+    address _curve,
+    string memory color1,
+    string memory color2,
+    string memory color3,
+    string memory color4,
+    string memory color5
   ) public {
     _name = name_;
     _symbol = symbol_;
@@ -134,25 +139,26 @@ contract ERC721 is
     _registerInterface(_INTERFACE_ID_ERC721_METADATA);
     _registerInterface(_INTERFACE_ID_ERC721_ENUMERABLE);
 
-    // Use your Vercel domain
-    // _setBaseURI(
-    //   string(
-    //     abi.encodePacked(
-    //       "https://crypty-frame.vercel.app/api/token/",
-    //       address(this),
-    //       "/"
-    //     )
-    //   )
-    // );
+    _setBaseURI(
+      string(
+        abi.encodePacked(
+          "https://crypty-frame.vercel.app/api/token/",
+          address(this),
+          "/"
+        )
+      )
+    );
     curve = _curve;
 
     // Your palette setup remains the same
-    palette.push("#009A49"); //green
-    palette.push("#005BBB"); //blue
-    palette.push("#BF0A30"); //red
-    palette.push("#FFD500"); //yellow
-    palette.push("#000000"); //black
-    palette.push("#ffffff"); //white: rare
+    // Set up palette with specified colors
+    palette.push(color1);
+    palette.push(color2);
+    palette.push(color3);
+    palette.push(color4);
+    palette.push(color5);
+    // White square is always the sixth square (rare)
+    palette.push("#ffffff");
   }
 
   function mint(address to, uint256 randomness)
