@@ -58,6 +58,10 @@ async function main() {
     await nft.deployed();
     console.log("ERC721 deployed to:", nft.address);
 
+    const baseURI = `https://crypty-frame.vercel.app/api/token/${nft.address}/`;
+    await nft.setBaseURI(baseURI);
+    console.log("BaseURI set to:", baseURI);
+
     // Verify NFT deployment
     const nftCode = await ethers.provider.getCode(nft.address);
     if (nftCode === "0x") {
