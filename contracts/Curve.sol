@@ -36,6 +36,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   // uint256 public fourSquaresMultiplier;
   // uint256 public rarePrizeMultiplier;
   uint256 public whiteSquareCount;
+  uint256 public fourSquaresCount;
 
   // this is currently 0.5% of the mint price
   uint256 public constant initMintPrice = 0.0005 ether; // at 0
@@ -192,6 +193,9 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     if (requests[requestId].isMint) {
       // mint first to increase supply
       uint256 tokenId = nft.mint(requests[requestId]._address, randomness);
+      if (hasFourSameSquares(tokenId)) {
+        fourSquaresCount++;
+      }
       emit Minted(
         tokenId,
         requests[requestId]._price,
@@ -213,6 +217,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
         // 4 squares of the same color wins the fourSquaresMultiplier
         burnPrice = getCurrentPriceToMint().mul(2);
         nftsCount--; // Only decrement for non-rare NFTs
+        fourSquaresCount--;
       } else {
         // Regular burn - just return the burn price
         burnPrice = 0;
@@ -258,7 +263,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
     // The white color is at index 5 in the palette (palette[5])
     // Each color is determined by dividing the byte value by 51
-    return toUint8(bhash, 4) / 51 == 4; // Check if middle square is white
+    return toUint8(bhash, 4) / 51 == 5; // Check if middle square is white
   }
 
   // helper function for generation

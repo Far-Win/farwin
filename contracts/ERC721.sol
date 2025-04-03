@@ -139,15 +139,15 @@ contract ERC721 is
     _registerInterface(_INTERFACE_ID_ERC721_METADATA);
     _registerInterface(_INTERFACE_ID_ERC721_ENUMERABLE);
 
-    _setBaseURI(
-      string(
-        abi.encodePacked(
-          "https://crypty-frame.vercel.app/api/token/",
-          address(this),
-          "/"
-        )
-      )
-    );
+    // _setBaseURI(
+    //   string(
+    //     abi.encodePacked(
+    //       "https://crypty-frame.vercel.app/api/token/",
+    //       address(this),
+    //       "/"
+    //     )
+    //   )
+    // );
     curve = _curve;
 
     // Your palette setup remains the same
