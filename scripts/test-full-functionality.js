@@ -7,8 +7,8 @@ async function main() {
   // const NFT_ADDRESS = "0x6324ec1fc17fCA9Ea5998e48F055f1f9d75AcaCC";
 
   // Update these addresses with your deployed contracts
-  const CURVE_ADDRESS = "0x717A8EF4562EB8c7Bf133784e89Afa05100344cE";
-  const NFT_ADDRESS = "0x15f0bfaa0bee6f59446b36125e8622f0d5623612";
+  const CURVE_ADDRESS = "0xcfB775BcC3ee61cf55d0Fd6CD3bE2d7F72B70857";
+  const NFT_ADDRESS = "0x2d29e73Ebd32c595399FEf8002D1e9bEccA74C8F";
 
   try {
     const [signer] = await ethers.getSigners();
