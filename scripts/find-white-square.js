@@ -2,8 +2,8 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  const CURVE_ADDRESS = "0x68DCddbc5282cE21cC08e3b7feA761c6444B8F12";
-  const NFT_ADDRESS = "0x2D35E1Db7F7a4959C40eEE3282cE64944dc46152";
+  const CURVE_ADDRESS = "0xcfB775BcC3ee61cf55d0Fd6CD3bE2d7F72B70857";
+  const NFT_ADDRESS = "0x2d29e73Ebd32c595399FEf8002D1e9bEccA74C8F";
 
   try {
     const [signer] = await ethers.getSigners();

@@ -91,10 +91,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     charity = _charity;
     operator = _operator; // Gelato operator address
 
-    LMIN = ABDKMathQuad.fromUInt(150); // Price approaches 0.15 ETH ($150)
+    LMIN = ABDKMathQuad.fromUInt(10);
     LMAX = ABDKMathQuad.fromUInt(1); // First mint is 0.001 ETH ($1)
-    T = ABDKMathQuad.fromUInt(50); // Controls curve shape
-    b = ABDKMathQuad.fromUInt(100);
+    T = ABDKMathQuad.fromUInt(400); // Controls curve shape
+    b = ABDKMathQuad.fromUInt(150);
   }
 
   modifier NftInitialized() {
@@ -285,6 +285,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   }
 
   function hasFourSameSquares(uint256 tokenId) public pure returns (bool) {
+    // will rename the function later should show hasFiveSquares
+
     bytes memory bhash = abi.encodePacked(bytes32(tokenId));
 
     // Count occurrences of each color (0-5 in the palette)
@@ -296,8 +298,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
         // Make sure it's within our palette range
         colorCounts[colorIndex]++;
 
-        // If we found 4 of any color, return true
-        if (colorCounts[colorIndex] >= 4) {
+        // If we found 5 of any color, return true
+        if (colorCounts[colorIndex] >= 5) {
           return true;
         }
       }
@@ -306,7 +308,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     return false;
   }
 
-  // if supply 0, mint price = 0.002
   function getCurrentPriceToMint() public view virtual returns (uint256) {
     return
       ABDKMathQuad.toUInt(
