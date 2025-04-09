@@ -1,9 +1,9 @@
-// scripts/find-black-square.js
+// scripts/find-white-square.js
 const { ethers } = require("hardhat");
 
 async function main() {
-  const CURVE_ADDRESS = "0xcfB775BcC3ee61cf55d0Fd6CD3bE2d7F72B70857";
-  const NFT_ADDRESS = "0x2d29e73Ebd32c595399FEf8002D1e9bEccA74C8F";
+  const CURVE_ADDRESS = "0xb6346cdB3225C5e9EA799461c216c50c26f70d63";
+  const NFT_ADDRESS = "0x26e8f6f90341bB558630602F69102e4bF853e5B4";
 
   try {
     const [signer] = await ethers.getSigners();
@@ -11,7 +11,7 @@ async function main() {
     const nft = await ethers.getContractAt("ERC721", NFT_ADDRESS);
 
     console.log(
-      "Starting the hunt for an NFT with any black square (rare NFT)..."
+      "Starting the hunt for an NFT with any white square (rare NFT)..."
     );
     console.log("Your address:", signer.address);
 
@@ -35,7 +35,7 @@ async function main() {
 
           if (isRare) {
             console.log(
-              `✅ Token ID ${tokenId.toString()} has a black square!`
+              `✅ Token ID ${tokenId.toString()} has a white square!`
             );
             foundRareNFT = true;
             rareTokenId = tokenId;
@@ -81,7 +81,7 @@ async function main() {
       console.log(
         "\nWaiting for Gelato to fulfill randomness... (1.5 seconds)"
       );
-      await new Promise((resolve) => setTimeout(resolve, 1500)); // Wait 1.5 seconds
+      await new Promise((resolve) => setTimeout(resolve, 4000)); // Wait 1.5 seconds
 
       // Get the latest token
       const newBalance = await nft.balanceOf(signer.address);
@@ -92,13 +92,13 @@ async function main() {
         );
         console.log(`Latest Token ID:`, tokenId.toString());
 
-        // Check if this token has any black square
+        // Check if this token has any white square
         try {
           const isRare = await curve.isRare(tokenId);
 
           if (isRare) {
             console.log(
-              `✅ Success! Token ID ${tokenId.toString()} has a black square!`
+              `✅ Success! Token ID ${tokenId.toString()} has a white square!`
             );
             foundRareNFT = true;
             rareTokenId = tokenId;
@@ -115,7 +115,7 @@ async function main() {
             break;
           } else {
             console.log(
-              "This NFT doesn't have any black squares. Continuing..."
+              "This NFT doesn't have any white squares. Continuing..."
             );
           }
         } catch (error) {
@@ -129,7 +129,7 @@ async function main() {
     }
 
     if (foundRareNFT) {
-      console.log("\n🎉 Success! Found an NFT with a black square!");
+      console.log("\n🎉 Success! Found an NFT with a white square!");
       console.log("Token ID:", rareTokenId.toString());
       console.log("\nNow hold onto this NFT - don't burn it yet!");
 
@@ -147,7 +147,7 @@ async function main() {
           )} ETH`
         );
         console.log(
-          `When burned, this black square NFT will win the ENTIRE RESERVE and reset the game!`
+          `When burned, this white square NFT will win the ENTIRE RESERVE and reset the game!`
         );
 
         // Also show four squares multiplier for comparison
@@ -172,7 +172,7 @@ async function main() {
       }
     } else {
       console.log(
-        "No NFT with a black square was found after extensive minting."
+        "No NFT with a white square was found after extensive minting."
       );
     }
   } catch (error) {
