@@ -33,13 +33,13 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   mapping(uint256 => Request) public requests;
   uint256 public nftsCount;
 
-  // uint256 public fourSquaresMultiplier;
+  // uint256 public FiveSquaresMultiplier;
   // uint256 public rarePrizeMultiplier;
   uint256 public whiteSquareCount;
-  uint256 public fourSquaresCount;
+  uint256 public fiveSquaresCount;
 
   // this is currently 0.5% of the mint price
-  uint256 public constant initMintPrice = 0.0005 ether; // at 0
+  uint256 public constant initMintPrice = 0.00005 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
   uint256 constant CREATOR_PERCENT = 50;
   uint256 constant CHARITY_PERCENT = 150;
@@ -91,10 +91,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     charity = _charity;
     operator = _operator; // Gelato operator address
 
-    LMIN = ABDKMathQuad.fromUInt(10);
+    LMIN = ABDKMathQuad.fromUInt(10); // Price approaches 0.15 ETH ($150)
     LMAX = ABDKMathQuad.fromUInt(1); // First mint is 0.001 ETH ($1)
-    T = ABDKMathQuad.fromUInt(400); // Controls curve shape
-    b = ABDKMathQuad.fromUInt(150);
+    T = ABDKMathQuad.fromUInt(50); // Controls curve shape
+    b = ABDKMathQuad.fromUInt(100);
   }
 
   modifier NftInitialized() {
@@ -107,23 +107,23 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   }
 
   // function setPrizeMultipliers(
-  //   uint256 _fourSquaresMultiplier,
+  //   uint256 _fiveSquaresMultiplier,
   //   uint256 _rareMultiplier
   // ) public onlyOwner {
   //   require(
-  //     _fourSquaresMultiplier != 0 && _rareMultiplier != 0,
+  //     _fiveSquaresMultiplier != 0 && _rareMultiplier != 0,
   //     "Curve: Multipliers cannot be zero."
   //   );
   //   require(
-  //     2 <= _fourSquaresMultiplier && _fourSquaresMultiplier <= 8,
-  //     "Curve: Four squares multiplier must be between 2 and 8"
+  //     2 <= _fiveSquaresMultiplier && _fiveSquaresMultiplier <= 8,
+  //     "Curve: Five squares multiplier must be between 2 and 8"
   //   );
   //   require(
   //     5 <= _rareMultiplier && _rareMultiplier <= 40,
   //     "Curve: Rare multiplier must be between 5 and 40"
   //   );
 
-  //   fourSquaresMultiplier = _fourSquaresMultiplier;
+  //   fiveSquaresMultiplier = _fiveSquaresMultiplier;
   //   rarePrizeMultiplier = _rareMultiplier;
   // }
 
@@ -193,8 +193,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     if (requests[requestId].isMint) {
       // mint first to increase supply
       uint256 tokenId = nft.mint(requests[requestId]._address, randomness);
-      if (hasFourSameSquares(tokenId)) {
-        fourSquaresCount++;
+      if (hasFiveSameSquares(tokenId)) {
+        fiveSquaresCount++;
       }
       emit Minted(
         tokenId,
@@ -213,11 +213,11 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
         whiteSquareCount++;
 
         emit Lottery(tokenId, randomness, true, burnPrice);
-      } else if (hasFourSameSquares(tokenId)) {
-        // 4 squares of the same color wins the fourSquaresMultiplier
+      } else if (hasFiveSameSquares(tokenId)) {
+        // 4 squares of the same color wins the fiveSquaresMultiplier
         burnPrice = getCurrentPriceToMint().mul(2);
         nftsCount--; // Only decrement for non-rare NFTs
-        fourSquaresCount--;
+        fiveSquaresCount--;
       } else {
         // Regular burn - just return the burn price
         burnPrice = 0;
@@ -241,10 +241,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   }
 
   function burn(uint256 tokenId) external virtual NftInitialized {
-    if (hasFourSameSquares(tokenId)) {
+    if (hasFiveSameSquares(tokenId)) {
       require(
         nftsCount > 1,
-        "Cannot burn four squares when only 1 NFT remains"
+        "Cannot burn five squares when only 1 NFT remains"
       );
     }
     uint256 requestId = _requestRandomness("");
@@ -284,9 +284,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     return tempUint;
   }
 
-  function hasFourSameSquares(uint256 tokenId) public pure returns (bool) {
-    // will rename the function later should show hasFiveSquares
-
+  function hasFiveSameSquares(uint256 tokenId) public pure returns (bool) {
     bytes memory bhash = abi.encodePacked(bytes32(tokenId));
 
     // Count occurrences of each color (0-5 in the palette)
@@ -308,6 +306,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     return false;
   }
 
+  // if supply 0, mint price = 0.002
   function getCurrentPriceToMint() public view virtual returns (uint256) {
     return
       ABDKMathQuad.toUInt(
