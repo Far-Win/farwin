@@ -3,6 +3,8 @@
 pragma solidity 0.8.19;
 
 // import "../../GSN/Context.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
 import "@openzeppelin/contracts/interfaces/IERC721Metadata.sol";
 import "@openzeppelin/contracts/interfaces/IERC721Enumerable.sol";
@@ -26,7 +28,8 @@ contract ERC721 is
   IERC721,
   IERC721Metadata,
   IERC721Enumerable,
-  Ownable
+  Ownable,
+  ReentrancyGuard
 {
   using SafeMath for uint256;
   using Address for address;
@@ -99,7 +102,18 @@ contract ERC721 is
   bytes4 private constant _INTERFACE_ID_ERC721_ENUMERABLE = 0x780e9d63;
 
   /* FREEDOM VARS */
+  struct Vesting {
+    uint256 tokenAmount;
+    uint256 vestingStartedAt;
+    address vestingToken;
+  }
+
   address public immutable curve;
+
+  uint256 public immutable vestingDurationSecs;
+
+  mapping (uint256 => Vesting) vestedTokens;
+
   // this is practically impossible to overflow.
   // but theoretically possible. Doesn't change that much, unless it overflows in one block (which is practically impossible)
   uint256 public totalEverMinted;
@@ -110,12 +124,20 @@ contract ERC721 is
     uint256 totalEverMinted,
     uint256 indexed randomness,
     address indexed to,
-    uint256 supplyAfterMint
+    uint256 supplyAfterMint,
+    uint256 vestingAmount
   );
   event Burned(
     uint256 indexed tokenId,
     address indexed owner,
     uint256 supplyAfterBurn
+  );
+
+  event VestingClaimed(
+    uint256 indexed tokenId,
+    address indexed owner,
+    address indexed vestingToken,
+    uint256 vestingAmount
   );
 
   /**
@@ -125,6 +147,7 @@ contract ERC721 is
     string memory name_,
     string memory symbol_,
     address _curve,
+    uint256 _vestingDurationSecs,
     string memory color1,
     string memory color2,
     string memory color3,
@@ -133,6 +156,7 @@ contract ERC721 is
   ) public {
     _name = name_;
     _symbol = symbol_;
+    vestingDurationSecs = _vestingDurationSecs; // if 0, no vesting tokens for this game
 
     // Register interfaces
     _registerInterface(_INTERFACE_ID_ERC721);
@@ -161,7 +185,7 @@ contract ERC721 is
     palette.push("#ffffff");
   }
 
-  function mint(address to, uint256 randomness)
+  function mint(address to, uint256 randomness,  uint256 vestingAmount, address vestingToken)
     external
     virtual
     returns (uint256 newTokenId)
@@ -188,7 +212,15 @@ contract ERC721 is
     // could theoretically mint a duplicate if it overflows in one block, but practically impossible with economic constraints.
     totalEverMinted += 1; // for unique hashes per block
 
-    emit Minted(tokenId, totalEverMinted, randomness, to, totalSupply());
+    if (vestingAmount != 0) {
+      vestedTokens[tokenId] = Vesting({
+        tokenAmount: vestingAmount,
+        vestingStartedAt: block.timestamp,
+        vestingToken: vestingToken
+      });
+    }
+
+    emit Minted(tokenId, totalEverMinted, randomness, to, totalSupply(), vestingAmount);
 
     return tokenId;
   }
@@ -201,7 +233,35 @@ contract ERC721 is
 
     _burn(tokenId);
 
+    delete vestedTokens[tokenId];
+
     emit Burned(tokenId, burner, totalSupply());
+  }
+
+  function claimVestedTokens(uint256 tokenId) external nonReentrant {
+    require(msg.sender == ownerOf(tokenId), "FREEDOM: Not the correct owner");
+
+    Vesting memory vesting = vestedTokens[tokenId];
+
+    address token = vesting.vestingToken;
+    uint256 amount = vesting.tokenAmount;
+
+    require(block.timestamp >= vesting.vestingStartedAt + vestingDurationSecs, "FREEDOM: Vesting period must pass");
+    require(IERC20(token).balanceOf(address(this)) >= amount, "FREEDOM: Insufficient balance");
+
+    delete vestedTokens[tokenId];
+
+    require(IERC20(token).transfer(msg.sender, amount), "FREEDOM: Token transfer failed");
+
+    emit VestingClaimed(tokenId, msg.sender, token, amount);
+  }
+
+  function getVestingInfo(uint256 tokenId) external view returns (uint256, uint256, address) {
+    return (
+        vestedTokens[tokenId].tokenAmount,
+        vestedTokens[tokenId].vestingStartedAt,
+        vestedTokens[tokenId].vestingToken
+    );
   }
 
   function generateSVGofTokenById(uint256 _tokenId)
