@@ -2,6 +2,7 @@
 pragma solidity 0.8.19;
 
 import "./ERC721.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "abdk-libraries-solidity/ABDKMathQuad.sol";
@@ -38,6 +39,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   uint256 public whiteSquareCount;
   uint256 public fiveSquaresCount;
 
+  uint256 public vestingAmountPerUser;
+
   // this is currently 0.5% of the mint price
   uint256 public constant initMintPrice = 0.00005 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
@@ -49,6 +52,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   // because it uses linear pricing
   // but useful to know off-hand. Especially because this.balance might not be the same as the actual reserve
   uint256 public reserve;
+
+  address public immutable vestingToken;
 
   address payable public immutable creator;
   address payable public immutable charity;
@@ -81,7 +86,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   constructor(
     address payable _creator,
     address payable _charity,
-    address _operator
+    address _operator,
+    address _vestingToken
   ) {
     require(_creator != address(0), "Invalid creator address"); // Gelato operator address
     require(_charity != address(0), "Invalid charity address");
@@ -90,6 +96,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     creator = _creator;
     charity = _charity;
     operator = _operator; // Gelato operator address
+    vestingToken = _vestingToken; // we're not checking for zero address, because vesting token is optional
 
     LMIN = ABDKMathQuad.fromUInt(10); // Price approaches 0.15 ETH ($150)
     LMAX = ABDKMathQuad.fromUInt(1); // First mint is 0.001 ETH ($1)
@@ -191,8 +198,15 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     bytes memory /* extraData */
   ) internal override {
     if (requests[requestId].isMint) {
-      // mint first to increase supply
-      uint256 tokenId = nft.mint(requests[requestId]._address, randomness);
+      uint256 tokenId;
+      if (IERC20(vestingToken).balanceOf(address(this)) >= vestingAmountPerUser) {
+        // mint first to increase supply
+        tokenId = nft.mint(requests[requestId]._address, randomness, vestingAmountPerUser, vestingToken);
+        IERC20(vestingToken).transfer(address(nft), vestingAmountPerUser);
+      } else {
+        // mint first to increase supply
+        tokenId = nft.mint(requests[requestId]._address, randomness, 0, address(0));
+      }
       if (hasFiveSameSquares(tokenId)) {
         fiveSquaresCount++;
       }
@@ -358,5 +372,17 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   function initNFT(ERC721 _nft) external onlyOwner {
     require(address(nft) == address(0), "Already initiated");
     nft = _nft;
+  }
+
+  function setVestingDistributionAmount(uint256 _vestingAmountPerUser) external onlyOwner {
+    require(_vestingAmountPerUser > 0, "Vesting amount must be greater than 0");
+
+    vestingAmountPerUser = _vestingAmountPerUser;
+  }
+
+  function recoverVestingTokens(uint256 amount) external onlyOwner {
+    require(IERC20(vestingToken).balanceOf(address(this)) >= amount, "Insufficient balance");
+    
+    IERC20(vestingToken).transfer(msg.sender, amount);
   }
 }
