@@ -65,10 +65,16 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   ERC721 public nft;
 
+  event CurveCreated(
+    address indexed creator
+  );
+
   event Minted(
     uint256 indexed tokenId,
     uint256 indexed pricePaid,
-    uint256 indexed reserveAfterMint
+    uint256 indexed reserveAfterMint,
+    bool isWhiteSquare,
+    bool isFiveSquares
   );
   event Burned(
     uint256 indexed tokenId,
@@ -102,6 +108,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     LMAX = ABDKMathQuad.fromUInt(1); // First mint is 0.001 ETH ($1)
     T = ABDKMathQuad.fromUInt(50); // Controls curve shape
     b = ABDKMathQuad.fromUInt(100);
+
+    emit CurveCreated(creator);
   }
 
   modifier NftInitialized() {
@@ -210,10 +218,13 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
       if (hasFiveSameSquares(tokenId)) {
         fiveSquaresCount++;
       }
+
       emit Minted(
         tokenId,
         requests[requestId]._price,
-        requests[requestId]._reserve
+        requests[requestId]._reserve,
+        isRare(tokenId),
+        hasFiveSameSquares(tokenId)
       );
     } else {
       // Burn
@@ -382,7 +393,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   function recoverVestingTokens(uint256 amount) external onlyOwner {
     require(IERC20(vestingToken).balanceOf(address(this)) >= amount, "Insufficient balance");
-    
+
     IERC20(vestingToken).transfer(msg.sender, amount);
   }
 }
