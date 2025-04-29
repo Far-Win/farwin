@@ -110,7 +110,7 @@ contract ERC721 is
 
   address public immutable curve;
 
-  uint256 public immutable vestingDurationSecs;
+  uint256 public constant VESTING_DURATION_SECS = 1000000;
 
   mapping (uint256 => Vesting) vestedTokens;
 
@@ -147,7 +147,6 @@ contract ERC721 is
     string memory name_,
     string memory symbol_,
     address _curve,
-    uint256 _vestingDurationSecs,
     string memory color1,
     string memory color2,
     string memory color3,
@@ -156,7 +155,6 @@ contract ERC721 is
   ) public {
     _name = name_;
     _symbol = symbol_;
-    vestingDurationSecs = _vestingDurationSecs; // if 0, no vesting tokens for this game
 
     // Register interfaces
     _registerInterface(_INTERFACE_ID_ERC721);
@@ -246,7 +244,7 @@ contract ERC721 is
     address token = vesting.vestingToken;
     uint256 amount = vesting.tokenAmount;
 
-    require(block.timestamp >= vesting.vestingStartedAt + vestingDurationSecs, "FREEDOM: Vesting period must pass");
+    require(block.timestamp >= vesting.vestingStartedAt + VESTING_DURATION_SECS, "FREEDOM: Vesting period must pass");
     require(IERC20(token).balanceOf(address(this)) >= amount, "FREEDOM: Insufficient balance");
 
     delete vestedTokens[tokenId];
