@@ -93,7 +93,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     address payable _creator,
     address payable _charity,
     address _operator,
-    address _vestingToken
+    address _vestingToken,
+    uint256 _vestingAmountPerUser
   ) {
     require(_creator != address(0), "Invalid creator address"); // Gelato operator address
     require(_charity != address(0), "Invalid charity address");
@@ -103,6 +104,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     charity = _charity;
     operator = _operator; // Gelato operator address
     vestingToken = _vestingToken; // we're not checking for zero address, because vesting token is optional
+    vestingAmountPerUser = _vestingAmountPerUser;
 
     LMIN = ABDKMathQuad.fromUInt(10); // Price approaches 0.15 ETH ($150)
     LMAX = ABDKMathQuad.fromUInt(1); // First mint is 0.001 ETH ($1)
@@ -210,7 +212,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
       if (IERC20(vestingToken).balanceOf(address(this)) >= vestingAmountPerUser) {
         // mint first to increase supply
         tokenId = nft.mint(requests[requestId]._address, randomness, vestingAmountPerUser, vestingToken);
-        IERC20(vestingToken).transfer(address(nft), vestingAmountPerUser);
+        require(
+          IERC20(vestingToken).transfer(address(nft), vestingAmountPerUser),
+          "ERC20 transfer failed"
+        );
       } else {
         // mint first to increase supply
         tokenId = nft.mint(requests[requestId]._address, randomness, 0, address(0));

@@ -24,13 +24,26 @@ async function main() {
   console.log("White (#ffffff) will be used for rare NFTs\n");
 
   try {
+    // 0. Deploy a Mock Token for vesting testing
+    // console.log("\n0. Deploying MockERC20 contract...");
+    // const Mock = await ethers.getContractFactory("MockERC20");
+    // const mock = await Mock.deploy(
+    //   "250000000000000000000",
+    //   "Test",
+    //   "TEST"
+    // );
+    // await mock.deployed();
+    // console.log("Mock ERC20 deployed to: ", mock.address);
+
     // 1. Deploy Curve first
     console.log("\n1. Deploying Curve contract...");
     const Curve = await ethers.getContractFactory("Curve");
     const curve = await Curve.deploy(
       deployer.address, // creator
       deployer.address, // charity
-      "0x1F919E17bB2f322bd1ed5Bf822988C37162CF46c" // gelato operator
+      "0x1F919E17bB2f322bd1ed5Bf822988C37162CF46c", // gelato operator
+      "0x468ff61d90b022B283A9aeFAb84ed66F79286d11", // Mock ERC20 address
+      "1000000000000000000" // vesting amount per user
     );
     await curve.deployed();
     console.log("Curve deployed to:", curve.address);
@@ -74,6 +87,8 @@ async function main() {
     const initTx = await curve.initNFT(nft.address);
     await initTx.wait();
     console.log("NFT initialized in Curve contract ✓");
+
+
 
     // // 4. Set prize multipliers
     // console.log("\n4. Setting prize multipliers...");
