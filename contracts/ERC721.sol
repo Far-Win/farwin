@@ -244,6 +244,7 @@ contract ERC721 is
     address token = vesting.vestingToken;
     uint256 amount = vesting.tokenAmount;
 
+    require(amount > 0, "FREEDOM: Your vesting amount is 0");
     require(block.timestamp >= vesting.vestingStartedAt + VESTING_DURATION_SECS, "FREEDOM: Vesting period must pass");
     require(IERC20(token).balanceOf(address(this)) >= amount, "FREEDOM: Insufficient balance");
 
