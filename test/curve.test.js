@@ -135,7 +135,7 @@ describe("Curve", async function () {
     expect(vestingInfo[0]).to.be.equal(vestingAmountPerUser);
     expect(vestingInfo[2]).to.be.equal(mockERC20.address);
 
-    await expect(nft.connect(user).claimVestedTokens(tokenId)).to.be.reverted;
+    await expect(nft.connect(user).claimVestedTokens(tokenId)).to.be.revertedWith("FREEDOM: Vesting period must pass");
 
     await networkUtils.setTime((Date.now() + 1000000));
 
@@ -144,5 +144,24 @@ describe("Curve", async function () {
     await nft.connect(user).claimVestedTokens(tokenId);
 
     expect(await mockERC20.balanceOf(user.address)).to.be.equal(vestingAmountPerUser);
+  });
+
+  it("Should successfully mint an NFT w/o a vesting token", async function () {
+    const mintPrice = await curve.getCurrentPriceToMint();
+    const mintValue = mintPrice.mul(110).div(100); // Add 10%
+
+    await curve.connect(user).mint({ value: mintValue });
+
+    const requestId = 0;
+    const dataWithRound = await getDataWithRound(requestId);
+
+    await curve.connect(owner).fulfillRandomness(randomness, dataWithRound);
+
+    expect(await mockERC20.balanceOf(nft.address)).to.be.equal(0);
+    expect(await mockERC20.balanceOf(curve.address)).to.be.equal(0);
+    expect(await mockERC20.balanceOf(user.address)).to.be.equal(0);
+
+    const tokenId = await nft.tokenOfOwnerByIndex(user.address, 0);
+    await expect(nft.connect(user).claimVestedTokens(tokenId)).to.be.revertedWith("FREEDOM: Your vesting amount is 0");
   });
 });
