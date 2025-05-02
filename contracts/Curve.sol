@@ -209,7 +209,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   ) internal override {
     if (requests[requestId].isMint) {
       uint256 tokenId;
-      if (IERC20(vestingToken).balanceOf(address(this)) >= vestingAmountPerUser) {
+      if (vestingToken != address(0) && IERC20(vestingToken).balanceOf(address(this)) >= vestingAmountPerUser) {
         // mint first to increase supply
         tokenId = nft.mint(requests[requestId]._address, randomness, vestingAmountPerUser, vestingToken);
         require(
