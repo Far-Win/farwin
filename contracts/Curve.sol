@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.19;
 
 import "./ERC721.sol";
@@ -11,10 +11,6 @@ import "./gelato/GelatoVRFConsumerBase.sol";
 contract Curve is GelatoVRFConsumerBase, Ownable {
   using SafeMath for uint256;
   using ABDKMathQuad for bytes16;
-
-  // linear bonding curve
-  // 99.5% going into reserve.
-  // 0.5% going to creator.
 
   bytes16 internal LMIN;
   bytes16 internal LMAX;
@@ -41,8 +37,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   uint256 public vestingAmountPerUser;
 
-  // this is currently 0.5% of the mint price
-  uint256 public constant initMintPrice = 0.00005 ether; // at 0
+  uint256 public constant initMintPrice = 0.0025 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
   uint256 constant CREATOR_PERCENT = 50;
   uint256 constant CHARITY_PERCENT = 150;
@@ -106,10 +101,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     vestingToken = _vestingToken; // we're not checking for zero address, because vesting token is optional
     vestingAmountPerUser = _vestingAmountPerUser;
 
-    LMIN = ABDKMathQuad.fromUInt(10); // Price approaches 0.15 ETH ($150)
-    LMAX = ABDKMathQuad.fromUInt(1); // First mint is 0.001 ETH ($1)
-    T = ABDKMathQuad.fromUInt(50); // Controls curve shape
-    b = ABDKMathQuad.fromUInt(100);
+    LMIN = ABDKMathQuad.fromUInt(10);
+    LMAX = ABDKMathQuad.fromUInt(1);
+    T = ABDKMathQuad.fromUInt(500); // Controls curve shape
+    b = ABDKMathQuad.fromUInt(80);
 
     emit CurveCreated(creator);
   }
@@ -143,24 +138,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   //   fiveSquaresMultiplier = _fiveSquaresMultiplier;
   //   rarePrizeMultiplier = _rareMultiplier;
   // }
-
-  /*
-        With one mint front-runned, a front-runner will make a loss.
-        With linear price increases of 0.001, it's not profitable.
-        BECAUSE it costs 0.012 ETH at 50 gwei to mint (storage/smart contract costs) + 0.5% loss from creator fee.
-
-        It becomes more profitable to front-run if there are multiple buys that can be spotted
-        from multiple buyers in one block. However, depending on gas price, it depends how profitable it is.
-        Because the planned buffer on the front-end is 0.01 ETH, it's not profitable to front-run any normal amounts.
-        Unless, someone creates a specific contract to start bulk minting.
-        To curb speculation, users can only mint one per transaction (unless you create a separate contract to do this).
-        Thus, ultimately, at this stage, while front-running can be profitable,
-        it is not generally feasible at this small scale.
-
-        Thus, for the sake of usability, there's no additional locks here for front-running protection.
-        A lock would be to have a transaction include the current price:
-        But that means, that only one neolastic per block would be minted (unless you can guess price rises).
-    */
 
   function mint() external payable virtual NftInitialized {
     // require(!gameEnded, "C: Game ended");
@@ -238,20 +215,20 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
       if (isRare(tokenId)) {
         // White square in the middle wins the entire reserve and resets the game
-        burnPrice = reserve; // Reset the reserve to 0 since we're paying everything out
-        nftsCount = 0; // Reset NFT count to 0
+        burnPrice = reserve;
+        nftsCount = 0;
         whiteSquareCount++;
 
         emit Lottery(tokenId, randomness, true, burnPrice);
       } else if (hasFiveSameSquares(tokenId)) {
         // 4 squares of the same color wins the fiveSquaresMultiplier
         burnPrice = getCurrentPriceToMint().mul(2);
-        nftsCount--; // Only decrement for non-rare NFTs
+        nftsCount--;
         fiveSquaresCount--;
       } else {
         // Regular burn - just return the burn price
         burnPrice = 0;
-        nftsCount--; // Only decrement for non-rare NFTs
+        nftsCount--;
       }
 
       nft.burn(requests[requestId]._address, tokenId);
@@ -283,16 +260,10 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     requests[requestId]._tokenId = tokenId;
   }
 
-  // Rest of your helper functions remain the same
-  function isRare(uint256 tokenId) public view returns (bool) {
-    // Get the SVG representation of the token to check if white is in the middle
-    string memory svgImage = nft.generateSVGofTokenById(tokenId);
-
+  function isRare(uint256 tokenId) public pure returns (bool) {
     // Check if the middle square (index 4) is white
     bytes memory bhash = abi.encodePacked(bytes32(tokenId));
 
-    // The white color is at index 5 in the palette (palette[5])
-    // Each color is determined by dividing the byte value by 51
     return toUint8(bhash, 4) / 51 == 5; // Check if middle square is white
   }
 
@@ -323,10 +294,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     for (uint256 i = 0; i < 9; i++) {
       uint8 colorIndex = toUint8(bhash, i) / 51;
       if (colorIndex < 6) {
-        // Make sure it's within our palette range
         colorCounts[colorIndex]++;
 
-        // If we found 5 of any color, return true
         if (colorCounts[colorIndex] >= 5) {
           return true;
         }
@@ -336,7 +305,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     return false;
   }
 
-  // if supply 0, mint price = 0.002
   function getCurrentPriceToMint() public view virtual returns (uint256) {
     return
       ABDKMathQuad.toUInt(
@@ -376,7 +344,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     return whiteSquareCount;
   }
 
-  // if supply 1, then burn price = 0.000995
   function getCurrentPriceToBurn() public view virtual returns (uint256) {
     uint256 burnPrice = getCurrentPriceToMint();
     burnPrice -= (burnPrice.mul(CREATOR_PERCENT.add(CHARITY_PERCENT))).div(
