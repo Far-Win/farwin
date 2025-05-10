@@ -37,6 +37,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
 
   uint256 public vestingAmountPerUser;
 
+  uint256 public charityFunds;
+
   uint256 public constant initMintPrice = 0.0025 ether; // at 0
   // uint256 public constant mintPriceMove = 0.002 ether / 16000;
   uint256 constant CREATOR_PERCENT = 50;
@@ -78,7 +80,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
   );
   event Lottery(
     uint256 indexed tokenId,
-    uint256 indexed lotteryId,
     bool isWinner,
     uint256 indexed prizeAmount
   );
@@ -172,6 +173,8 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     (success, ) = charity.call{ value: charityAmount }("");
     require(success, "Unable to send to charity");
 
+    charityFunds += charityAmount;
+
     uint256 buffer = msg.value.sub(mintPrice); // excess/padding/buffer
     if (buffer > 0) {
       (success, ) = msg.sender.call{ value: buffer }("");
@@ -184,80 +187,69 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     uint256 requestId,
     bytes memory /* extraData */
   ) internal override {
-    if (requests[requestId].isMint) {
-      uint256 tokenId;
-      if (vestingToken != address(0) && IERC20(vestingToken).balanceOf(address(this)) >= vestingAmountPerUser) {
-        // mint first to increase supply
-        tokenId = nft.mint(requests[requestId]._address, randomness, vestingAmountPerUser, vestingToken);
-        require(
-          IERC20(vestingToken).transfer(address(nft), vestingAmountPerUser),
-          "ERC20 transfer failed"
-        );
-      } else {
-        // mint first to increase supply
-        tokenId = nft.mint(requests[requestId]._address, randomness, 0, address(0));
-      }
-      if (hasFiveSameSquares(tokenId)) {
-        fiveSquaresCount++;
-      }
-
-      emit Minted(
-        tokenId,
-        requests[requestId]._price,
-        requests[requestId]._reserve,
-        isRare(tokenId),
-        hasFiveSameSquares(tokenId)
+    uint256 tokenId;
+    if (vestingToken != address(0) && IERC20(vestingToken).balanceOf(address(this)) >= vestingAmountPerUser) {
+      // mint first to increase supply
+      tokenId = nft.mint(requests[requestId]._address, randomness, vestingAmountPerUser, vestingToken);
+      require(
+        IERC20(vestingToken).transfer(address(nft), vestingAmountPerUser),
+        "ERC20 transfer failed"
       );
     } else {
-      // Burn
-      uint256 burnPrice;
-      uint256 tokenId = requests[requestId]._tokenId;
-
-      if (isRare(tokenId)) {
-        // White square in the middle wins the entire reserve and resets the game
-        burnPrice = reserve;
-        nftsCount = 0;
-        whiteSquareCount++;
-
-        emit Lottery(tokenId, randomness, true, burnPrice);
-      } else if (hasFiveSameSquares(tokenId)) {
-        // 4 squares of the same color wins the fiveSquaresMultiplier
-        burnPrice = getCurrentPriceToMint().mul(2);
-        nftsCount--;
-        fiveSquaresCount--;
-      } else {
-        // Regular burn - just return the burn price
-        burnPrice = 0;
-        nftsCount--;
-      }
-
-      nft.burn(requests[requestId]._address, tokenId);
-
-      if (!isRare(tokenId)) {
-        emit Lottery(tokenId, randomness, false, burnPrice);
-      }
-
-      reserve = reserve.sub(burnPrice);
-      (bool success, ) = requests[requestId]._address.call{ value: burnPrice }(
-        ""
-      );
-      require(success, "Unable to send burnPrice");
-
-      emit Burned(tokenId, burnPrice, reserve);
+      // mint first to increase supply
+      tokenId = nft.mint(requests[requestId]._address, randomness, 0, address(0));
     }
+    if (hasFiveSameSquares(tokenId)) {
+      fiveSquaresCount++;
+    }
+
+    emit Minted(
+      tokenId,
+      requests[requestId]._price,
+      requests[requestId]._reserve,
+      isRare(tokenId),
+      hasFiveSameSquares(tokenId)
+    );
   }
 
   function burn(uint256 tokenId) external virtual NftInitialized {
     if (hasFiveSameSquares(tokenId)) {
       require(
-        nftsCount > 1,
-        "Cannot burn five squares when only 1 NFT remains"
+        nftsCount >= 3,
+        "Cannot burn five squares when only 2 NFT remains"
       );
     }
-    uint256 requestId = _requestRandomness("");
+    uint256 burnPrice;
+    if (isRare(tokenId)) {
+      // White square in the middle wins the entire reserve and resets the game
+      burnPrice = reserve;
+      nftsCount = 0;
+      whiteSquareCount++;
 
-    requests[requestId]._address = msg.sender;
-    requests[requestId]._tokenId = tokenId;
+      emit Lottery(tokenId, true, burnPrice);
+    } else if (hasFiveSameSquares(tokenId)) {
+      burnPrice = getCurrentPriceToMint().mul(2);
+      nftsCount--;
+      fiveSquaresCount--;
+    } else {
+      // Regular burn - just return the burn price
+      burnPrice = 0;
+      nftsCount--;
+    }
+
+    nft.burn(msg.sender, tokenId);
+
+    if (!isRare(tokenId)) {
+      emit Lottery(tokenId, false, burnPrice);
+    }
+
+    reserve = reserve.sub(burnPrice);
+    (bool success, ) = msg.sender.call{ value: burnPrice }(
+      ""
+    );
+    require(success, "Unable to send burnPrice");
+
+    emit Burned(tokenId, burnPrice, reserve);
   }
 
   function isRare(uint256 tokenId) public pure returns (bool) {
@@ -349,6 +341,7 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
     burnPrice -= (burnPrice.mul(CREATOR_PERCENT.add(CHARITY_PERCENT))).div(
       DENOMINATOR
     );
+
     return burnPrice;
   }
 
