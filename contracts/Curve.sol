@@ -323,26 +323,12 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
       );
   }
 
-  // helper function for legibility
-  function getReserveCut() public view virtual returns (uint256) {
-    return getCurrentPriceToBurn();
-  }
-
   function getNftCount() public view virtual returns (uint256) {
     return nftsCount;
   }
 
   function getWhiteSquareCount() public view virtual returns (uint256) {
     return whiteSquareCount;
-  }
-
-  function getCurrentPriceToBurn() public view virtual returns (uint256) {
-    uint256 burnPrice = getCurrentPriceToMint();
-    burnPrice -= (burnPrice.mul(CREATOR_PERCENT.add(CHARITY_PERCENT))).div(
-      DENOMINATOR
-    );
-
-    return burnPrice;
   }
 
   function initNFT(ERC721 _nft) external onlyOwner {
