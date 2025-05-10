@@ -164,4 +164,188 @@ describe("Curve", async function () {
     const tokenId = await nft.tokenOfOwnerByIndex(user.address, 0);
     await expect(nft.connect(user).claimVestedTokens(tokenId)).to.be.revertedWith("FREEDOM: Your vesting amount is 0");
   });
+
+  it("Should burn the regular minted NFT", async function () {
+    const mintPrice = await curve.getCurrentPriceToMint();
+    const mintValue = mintPrice.mul(110).div(100); // Add 10%
+
+    await curve.connect(user).mint({ value: mintValue });
+
+    const requestId = 0;
+    const dataWithRound = await getDataWithRound(requestId);
+
+    await curve.connect(owner).fulfillRandomness(randomness, dataWithRound);
+
+    const tokenId = await nft.tokenOfOwnerByIndex(user.address, 0);
+
+    await expect(curve.burn(tokenId)).to.be.revertedWith("FREEDOM: Not the correct owner");
+
+    await curve.connect(user).burn(tokenId);
+  });
+
+  it("Should burn the five same square minted NFT with a small reserve", async function () {
+    let tokenId;
+
+    for (let i = 0; i < 100; i++) {
+      const mintPrice = await curve.getCurrentPriceToMint();
+      const mintValue = mintPrice.mul(110).div(100); // Add 10%
+
+      await curve.connect(user).mint({ value: mintValue });
+
+      const requestId = i;
+      const dataWithRound = await getDataWithRound(requestId);
+
+      await curve.connect(owner).fulfillRandomness(randomness, dataWithRound);
+
+      const balance = await nft.balanceOf(user.address);
+      tokenId = await nft.tokenOfOwnerByIndex(user.address, balance.sub(1));
+
+      const hasFive = await curve.hasFiveSameSquares(tokenId);
+      if (hasFive) {
+        break;
+      }
+    }
+
+    await expect(curve.connect(user).burn(tokenId)).to.be.revertedWith("Cannot burn five squares when only 2 NFT remains");
+
+    // mint an extra NFT to meet the burning condition
+    const mintPrice = await curve.getCurrentPriceToMint();
+    const mintValue = mintPrice.mul(110).div(100); // Add 10%
+
+    await curve.connect(user).mint({ value: mintValue });
+
+    const requestId = 2;
+    const dataWithRound = await getDataWithRound(requestId);
+
+    await curve.connect(owner).fulfillRandomness(randomness, dataWithRound);
+
+    expect(await curve.hasFiveSameSquares(tokenId)).to.be.true;
+
+    const burnPrice = (await curve.getCurrentPriceToMint()).mul(2);
+    const balanceBeforeBurn = await ethers.provider.getBalance(user.address);
+    
+    const burn = await curve.connect(user).burn(tokenId);
+    const receipt = await burn.wait();
+
+    const burnedEvent = receipt.events?.filter((event) => event.event === "Burned");
+
+    expect(burnedEvent[0].args.priceReceived).to.be.equal(burnPrice);
+
+    const gasCost = receipt.gasUsed.mul(receipt.effectiveGasPrice)
+    const balanceAfterBurn = await ethers.provider.getBalance(user.address);
+
+    expect(balanceAfterBurn).to.be.equal(balanceBeforeBurn.add(burnPrice).sub(gasCost));
+  });
+
+  it("Should burn the five same square minted NFT with a large reserve", async function () {
+    let tokenId;
+    let found = false;
+    let fiveSqTokenId;
+
+    for (let i = 0; i < 50; i++) {
+      const mintPrice = await curve.getCurrentPriceToMint();
+      const mintValue = mintPrice.mul(110).div(100); // Add 10%
+
+      await curve.connect(user).mint({ value: mintValue });
+
+      const requestId = i;
+      const dataWithRound = await getDataWithRound(requestId);
+
+      await curve.connect(owner).fulfillRandomness(randomness, dataWithRound);
+
+      const balance = await nft.balanceOf(user.address);
+      tokenId = await nft.tokenOfOwnerByIndex(user.address, balance.sub(1));
+
+      const hasFive = await curve.hasFiveSameSquares(tokenId);
+      if (!found && hasFive) {
+        fiveSqTokenId = tokenId;
+        found = true;
+      }
+    }
+
+    expect(await curve.hasFiveSameSquares(fiveSqTokenId)).to.be.true;
+
+    const burnPrice = (await curve.getCurrentPriceToMint()).mul(2);
+    const balanceBeforeBurn = await ethers.provider.getBalance(user.address);
+    
+    const burn = await curve.connect(user).burn(fiveSqTokenId);
+    const receipt = await burn.wait();
+
+    const burnedEvent = receipt.events?.filter((event) => event.event === "Burned");
+
+    expect(burnedEvent[0].args.priceReceived).to.be.equal(burnPrice);
+
+    const gasCost = receipt.gasUsed.mul(receipt.effectiveGasPrice)
+    const balanceAfterBurn = await ethers.provider.getBalance(user.address);
+
+    expect(balanceAfterBurn).to.be.equal(balanceBeforeBurn.add(burnPrice).sub(gasCost));
+  });
+
+  it("Should be able to mint a rare NFT, burn it and get the whole reserve", async function () {
+    let tokenId;
+
+    for (let i = 0; i < 150; i++) {
+      const mintPrice = await curve.getCurrentPriceToMint();
+      const mintValue = mintPrice.mul(110).div(100); // Add 10%
+
+      await curve.connect(user).mint({ value: mintValue });
+
+      const requestId = i;
+      const dataWithRound = await getDataWithRound(requestId);
+
+      await curve.connect(owner).fulfillRandomness(randomness, dataWithRound);
+
+      const balance = await nft.balanceOf(user.address);
+      tokenId = await nft.tokenOfOwnerByIndex(user.address, balance.sub(1));
+
+      const isRare = await curve.isRare(tokenId);
+      if (isRare) {
+        break;
+      }
+    }
+
+    expect(await curve.isRare(tokenId)).to.be.true;
+
+    const burnPrice = await ethers.provider.getBalance(curve.address);
+    const balanceBeforeBurn = await ethers.provider.getBalance(user.address);
+
+    const burn = await curve.connect(user).burn(tokenId);
+    const receipt = await burn.wait();
+
+    const burnedEvent = receipt.events?.filter((event) => event.event === "Burned");
+    const lotteryEvent = receipt.events?.filter((event) => event.event === "Lottery")
+
+    expect(burnedEvent[0].args.priceReceived).to.be.equal(burnPrice);
+    expect(lotteryEvent[0].args.isWinner).to.be.true;
+
+    const gasCost = receipt.gasUsed.mul(receipt.effectiveGasPrice)
+    const balanceAfterBurn = await ethers.provider.getBalance(user.address);
+
+    expect(balanceAfterBurn).to.be.equal(balanceBeforeBurn.add(burnPrice).sub(gasCost));
+    expect(await ethers.provider.getBalance(curve.address)).to.be.equal(0);
+  });
+
+  it("Should check out charity funding", async function () {
+    expect(await ethers.provider.getBalance(charity.address)).to.be.equal(ethers.utils.parseEther("10000"));
+
+    for (let i = 0; i < 10; i++) {
+      const charityBalanceBefore = await ethers.provider.getBalance(charity.address);
+      const mintPrice = await curve.getCurrentPriceToMint();
+      const mintValue = mintPrice.mul(110).div(100); // Add 10%
+      const charityAmount = mintPrice.mul(150).div(1000);
+
+      await curve.connect(user).mint({ value: mintValue });
+
+      const charityBalanceAfter = await ethers.provider.getBalance(charity.address);
+      const charityFundsFromContract = await curve.charityFunds();
+
+      const requestId = i;
+      const dataWithRound = await getDataWithRound(requestId);
+
+      await curve.connect(owner).fulfillRandomness(randomness, dataWithRound);
+
+      expect(charityBalanceAfter).to.be.equal(charityBalanceBefore.add(charityAmount));
+      expect(charityBalanceAfter.sub(ethers.utils.parseEther("10000"))).to.be.equal(charityFundsFromContract);
+    }
+  });
 });
