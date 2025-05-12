@@ -323,14 +323,6 @@ contract Curve is GelatoVRFConsumerBase, Ownable {
       );
   }
 
-  function getNftCount() public view virtual returns (uint256) {
-    return nftsCount;
-  }
-
-  function getWhiteSquareCount() public view virtual returns (uint256) {
-    return whiteSquareCount;
-  }
-
   function initNFT(ERC721 _nft) external onlyOwner {
     require(address(nft) == address(0), "Already initiated");
     nft = _nft;
