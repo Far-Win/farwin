@@ -348,4 +348,14 @@ describe("Curve", async function () {
       expect(charityBalanceAfter.sub(ethers.utils.parseEther("10000"))).to.be.equal(charityFundsFromContract);
     }
   });
+
+  it("Should be able to set vesting amount per user only by the Curve owner", async function () {
+    const newVestingAmountPerUser = ethers.utils.parseEther("10");
+
+    await expect(curve.connect(user).setVestingDistributionAmount(newVestingAmountPerUser)).to.be.revertedWith("Ownable: caller is not the owner");
+
+    await curve.connect(owner).setVestingDistributionAmount(newVestingAmountPerUser);
+
+    expect(await curve.vestingAmountPerUser()).to.be.equal(newVestingAmountPerUser);
+  });
 });
